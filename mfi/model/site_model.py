@@ -139,6 +139,21 @@ def brand_category(stores: pd.DataFrame):
     return codes.value_counts().index[0] if len(codes) else None
 
 
+def competitor_mask(op, category):
+    """A competitor is any open premises in the same activity CLASS (first 4 digits: supermarkets 471101 and
+    hypermarkets 471102 compete), or any premises of a known chain whose main activity is in that class —
+    which catches e.g. 'Mi Alcampo' registered under fresh-food codes. Food & drink uses the exact code
+    (fast food vs restaurant vs café are different formats; the class would lump every bar together)."""
+    cls = category if category.startswith("56") else category[:4]   # food codes are already format-level
+    by_code = op["epigrafes"].fillna("").str.split(",").map(lambda l: any(c.startswith(cls) for c in l))
+    reg, mem = _registry()
+    if reg is None:
+        return by_code
+    same_class = reg[reg["top_activity"].fillna("").str.startswith(cls)]["brand_id"]
+    names = set(mem.loc[mem["brand_id"].isin(same_class), "name_norm"])
+    return by_code | op["name_norm"].isin(names)
+
+
 def is_open(p):
     return p["status"] == "Abierto"
 
@@ -162,7 +177,8 @@ class FeatureSpace:
         self.shop_tree = cKDTree(op[["x", "y"]].values)
         food = op[op["divisions"].fillna("").str.contains("56")]
         self.food_tree = cKDTree(food[["x", "y"]].values)
-        comp = op[has_code(op["epigrafes"], category) & ~op.index.isin(brand_idx)] if category else op.iloc[:0]
+        comp = op[competitor_mask(op, category)] if category else op.iloc[:0]
+        comp = comp[~comp.index.isin(brand_idx)]
         self.comp = comp
         self.comp_tree = cKDTree(comp[["x", "y"]].values) if len(comp) else None
 
@@ -311,8 +327,12 @@ def run(data: Data, query: str, n_sites=5, P=PARAMS, extra_stores: pd.DataFrame 
     coefs = pd.DataFrame({"feature": [FEATURE_LABELS[f] for f in FEATURES],
                           "effect": model[-1].coef_[0]}).sort_values("effect", key=abs, ascending=False)
     auc = float(np.mean(aucs)) if aucs else None
-    if auc is not None and auc < 0.7:
-        warns.append(f"Spatial-CV AUC {auc:.2f} is weak: the features explain this brand's choices poorly.")
+    reliability = ("unreliable" if auc is None or auc < 0.60 else "weak" if auc < 0.70 else "usable" if auc < 0.80 else "good")
+    if reliability == "unreliable":
+        warns.append(f"UNRELIABLE — accuracy {auc if auc is None else round(auc, 2)}: the model cannot tell where this brand "
+                     "chooses to open (barely better than chance). Sites below are exploratory only, not recommendations.")
+    elif reliability == "weak":
+        warns.append(f"Weak model — accuracy {auc:.2f}: treat the ranking as a shortlist to investigate, not an answer.")
 
     store_feat = fs.compute(stores[["x", "y"]].values)
     store_score = model.predict_proba(transform(store_feat))[:, 1]
@@ -373,7 +393,7 @@ def run(data: Data, query: str, n_sites=5, P=PARAMS, extra_stores: pd.DataFrame 
                          + " " + df["street_number"].fillna("")).str.strip()
 
     metrics = dict(
-        stores=len(stores), category=category, competitors=len(fs.comp),
+        stores=len(stores), category=category, competitors=len(fs.comp), reliability=reliability,
         auc_spatial_cv=auc, auc_folds=[round(a, 3) for a in aucs],
         background_n=len(bg), candidates_vacant=len(cand), candidates_pass_gate=n_gate,
         gate_score=gate, median_existing_store_demand=median_store,

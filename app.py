@@ -218,7 +218,7 @@ def page_analysis():
                 help="Stores whose captured demand is ≥50% of a typical existing store, accounting for cannibalisation.")
     k[4].metric("Same-category competitors", f"{m['competitors']:,}")
     for w in R.warnings:
-        st.warning(w)
+        (st.error if w.startswith("UNRELIABLE") else st.warning)(w)
 
     show_comp = st.toggle("Show competitors", value=False)
     show_alt = st.toggle("Show Monte Carlo alternatives", value=False,
