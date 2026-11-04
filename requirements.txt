@@ -9,3 +9,4 @@ streamlit>=1.40
 pydeck>=0.9
 altair>=5
 anthropic>=0.40
+pyproj>=3.6

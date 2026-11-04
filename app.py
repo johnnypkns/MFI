@@ -18,6 +18,7 @@ from mfi.model import pnl
 from mfi.model.export import APP
 from mfi.model.robustness import simulate as robustness
 from mfi.model.site_model import FEATURE_LABELS, PARAMS, load_data, run
+from mfi.stores import inventory, load_osm, missing_from_census
 
 st.set_page_config(page_title="Madrid Franchise Intelligence", page_icon="📍", layout="wide")
 RED, BLACK, GREY = [220, 38, 38], [17, 17, 17], [150, 150, 150]
@@ -138,9 +139,25 @@ def districts_geojson():
     return json.loads((APP / "districts.geojson").read_text())
 
 
+@st.cache_data(show_spinner=False)
+def registry():
+    return pd.read_parquet(APP / "brands.parquet")
+
+
+@st.cache_resource(show_spinner=False)
+def osm_points():
+    return load_osm()[0]
+
+
 @st.cache_resource(show_spinner=False)
 def analyse(brand, n):
-    return run(data(), brand, n)
+    extra = None
+    reg = registry()
+    row = reg[reg["brand"] == brand]
+    if len(row) and row.iloc[0]["sector"] == "Food & drink":        # OSM layer currently covers food & drink
+        inv, _, _ = inventory(data(), brand, osm_points())
+        extra = missing_from_census(inv)
+    return run(data(), brand, n, extra_stores=extra)
 
 
 @st.cache_resource(show_spinner=False)
@@ -157,10 +174,19 @@ def reset_downstream():
 def page_analysis():
     hero("Where should this franchise open next in Madrid? Census, income and commerce data → spatial model → "
          "Monte Carlo → ranked sites.")
-    c1, c2, c3 = st.columns([4, 1.2, 1])
-    pick = st.pills("Quick picks", QUICK, default=None, label_visibility="collapsed")
-    brand = c1.text_input("Franchise", value=pick or SS.get("brand", "McDonald's"), placeholder="Type a franchise name…",
-                          label_visibility="collapsed")
+    reg = registry()
+    c0, c1, c2, c3 = st.columns([1.4, 3.2, 1.2, 1])
+    sectors = ["All sectors"] + reg.groupby("sector")["n_stores"].sum().sort_values(ascending=False).index.tolist()
+    sector = c0.selectbox("Sector", sectors, label_visibility="collapsed")
+    opts = reg[reg["franchisable"] & (reg["n_stores"] >= 3)]
+    if sector != "All sectors":
+        opts = opts[opts["sector"] == sector]
+    names = opts["brand"].tolist()
+    label = dict(zip(opts["brand"], opts["brand"] + "  ·  " + opts["sector"] + "  ·  " + opts["n_stores"].astype(str) + " stores"))
+    cur = SS.get("brand", "McDonald's")
+    brand = c1.selectbox("Franchise", names, index=names.index(cur) if cur in names else 0, format_func=lambda b: label.get(b, b),
+                         label_visibility="collapsed", placeholder="Search any brand in Madrid…")
+    pick = None
     n_sites = c2.selectbox("Sites", [3, 5, 10], index=[3, 5, 10].index(SS.get("n_sites", 5)),
                            label_visibility="collapsed", format_func=lambda n: f"Top {n} sites")
     go = c3.button("Analyse  →", type="primary", width="stretch")
@@ -183,7 +209,7 @@ def page_analysis():
 
     R, rob, m = SS["result"], SS["rob"], SS["result"].metrics
     k = st.columns(5)
-    k[0].metric("Existing stores (census)", m["stores"])
+    k[0].metric("Existing stores", m["stores"], help="Census + OpenStreetMap, merged and de-duplicated")
     k[1].metric("Recommended sites", len(R.sites))
     k[2].metric("Model accuracy", f"{m['auc_spatial_cv']:.2f} AUC" if m["auc_spatial_cv"] else "n/a",
                 help="Spatial cross-validation: whole districts held out, then predicted. 0.5 = coin flip, 1.0 = perfect.")
@@ -197,12 +223,13 @@ def page_analysis():
     show_comp = st.toggle("Show competitors", value=False)
     show_alt = st.toggle("Show Monte Carlo alternatives", value=False,
                          help="Units the optimiser picked most often across the 200 simulations.")
-    st.markdown(f"""<div class="legend">
-    <span><i class="dot" style="background:#dc2626"></i>Recommended site</span>
-    <span><i class="dot" style="background:#111"></i>Existing {R.brand}</span>
-    {'<span><i class="dot" style="background:#9ca3af"></i>Competitor</span>' if show_comp else ''}
-    {'<span><i class="dot" style="background:#f59e0b"></i>Monte Carlo alternative</span>' if show_alt else ''}</div>""",
-                unsafe_allow_html=True)
+    legend = ['<span><i class="dot" style="background:#dc2626"></i>Recommended site</span>',
+              f'<span><i class="dot" style="background:#111"></i>Existing {R.brand}</span>']
+    if show_comp:
+        legend.append('<span><i class="dot" style="background:#9ca3af"></i>Competitor</span>')
+    if show_alt:
+        legend.append('<span><i class="dot" style="background:#f59e0b"></i>Monte Carlo alternative</span>')
+    st.markdown('<div class="legend">' + "".join(legend) + "</div>", unsafe_allow_html=True)
 
     sites = R.sites.merge(rob["summary"][["rank", "p_selected", "demand_p10", "demand_p90"]], on="rank")
     sites["label"] = sites["rank"].astype(int).astype(str)
@@ -461,6 +488,40 @@ def page_report():
             st.caption("Not run.")
 
 
+# ================================================================== PAGE — BRAND DIRECTORY
+def page_directory():
+    hero("Every chain operating in Madrid, detected from the municipal premises census and OpenStreetMap.")
+    reg = registry()
+    k = st.columns(4)
+    k[0].metric("Brands detected", f"{len(reg):,}")
+    k[1].metric("Franchisable sectors", f"{int(reg['franchisable'].sum()):,}")
+    k[2].metric("Food & drink brands", f"{int((reg['sector'] == 'Food & drink').sum()):,}")
+    k[3].metric("Seen in OpenStreetMap too", f"{int((reg['n_osm'] > 0).sum()):,}")
+    by = reg.groupby("sector").agg(brands=("brand_id", "count"), stores=("n_stores", "sum")).reset_index()
+    st.altair_chart(alt.Chart(by).mark_bar(color="#dc2626").encode(
+        x=alt.X("brands:Q", title="brands"), y=alt.Y("sector:N", sort="-x", title=None, axis=alt.Axis(labelLimit=260, labelOverlap=False)),
+        tooltip=["sector", "brands", "stores"]).properties(height=30 * len(by)), width="stretch")
+    f1, f2, f3 = st.columns([2, 1, 1])
+    q = f1.text_input("Search", placeholder="Search a brand…", label_visibility="collapsed")
+    sec = f2.selectbox("Sector", ["All"] + sorted(reg["sector"].unique()), label_visibility="collapsed")
+    only_fr = f3.toggle("Franchisable only", value=True)
+    t = reg.copy()
+    if q:
+        t = t[t["brand"].str.contains(q, case=False, regex=False)]
+    if sec != "All":
+        t = t[t["sector"] == sec]
+    if only_fr:
+        t = t[t["franchisable"]]
+    st.dataframe(t[["brand", "sector", "subcategory", "n_stores", "n_osm", "n_districts", "name_variants", "not_franchisable_reason"]],
+                 hide_index=True, width="stretch", height=520, column_config={
+                     "brand": "Brand", "sector": "Sector", "subcategory": "Main activity", "n_stores": "Stores (census)",
+                     "n_osm": "In OpenStreetMap", "n_districts": "Districts", "name_variants": "Name variants merged",
+                     "not_franchisable_reason": "Why not franchisable"})
+    st.caption("How it's built: names on open premises → generic names removed (activity words, sign types like "
+               "'muestra opaca') → chains = ≥3 distinct locations → spelling variants merged → sector from licences → "
+               "cross-checked with OpenStreetMap. Google Maps confirmation comes next.")
+
+
 # ================================================================== PAGE 3 — METHODOLOGY
 def page_methodology():
     hero("Exactly what runs behind every number: data, scraping, models, simulations, formulas and their limits.")
@@ -581,6 +642,7 @@ def page_methodology():
 
 
 pg = st.navigation([st.Page(page_analysis, title="Analysis", icon="🗺️", default=True),
+                    st.Page(page_directory, title="Brand directory", icon="🏷️", url_path="brands"),
                     st.Page(page_report, title="Investment report", icon="📑", url_path="report"),
                     st.Page(page_methodology, title="Methodology", icon="🧮", url_path="methodology")])
 pg.run()

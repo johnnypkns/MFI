@@ -67,12 +67,54 @@ def load_data(app_dir=APP) -> Data:
 
 
 # ------------------------------------------------------------------ brand + category
-def match_brand(prem: pd.DataFrame, query: str, threshold=0.86):
+STORE_CODE_PREFIXES = ("56", "4724", "4729", "4711")   # food service + food retail (Telepizza delivery shops are 472407)
+NOT_A_STORE = r"OFICINA|CORPORATIV|ALMAC[EÉ]N|OBRADOR CENTRAL|CENTRAL DE|SEDE"
+SPECIAL_VENUE_BARRIOS = {212}                            # Aeropuerto: travellers, no residential catchment
+
+
+NON_TRADING_CODES = ("000000", "821001", "")         # no activity / back-office call centre
+
+
+def is_store(df):
+    """A matched premises counts as a store if it isn't an office/warehouse and holds a trading licence.
+    Food brands (most premises in division 56) must hold a food licence specifically."""
+    codes = df["epigrafes"].fillna("").str.split(",")
+    office = df["trade_name"].fillna("").str.upper().str.contains(NOT_A_STORE, regex=True)
+    divs = codes.explode().str[:2]
+    divs = divs[~divs.isin(["00", "82", ""])]
+    food_brand = len(divs) and divs.value_counts().index[0] == "56"
+    if food_brand:
+        ok = codes.map(lambda l: any(c.startswith(STORE_CODE_PREFIXES) for c in l))
+    else:
+        ok = codes.map(lambda l: any(c not in NON_TRADING_CODES for c in l))
+    return ok & ~office
+
+
+def _registry():
+    try:
+        return pd.read_parquet(APP / "brands.parquet"), pd.read_parquet(APP / "brand_members.parquet")
+    except Exception:
+        return None, None
+
+
+def match_brand(prem: pd.DataFrame, query: str, threshold=0.86, stores_only=True):
     q = norm_name(query) or ""
+    reg, mem = _registry()
+    if reg is not None:
+        hit = reg[(reg["brand_key"] == q) | (reg["brand"].map(norm_name) == q)]
+        if len(hit):
+            names = set(mem.loc[mem["brand_id"] == hit.iloc[0]["brand_id"], "name_norm"])
+            return _finish(prem, names, stores_only)
     names = prem["name_norm"].dropna().unique()
     hits = [n for n in names if (n == q) or len(q) >= 3 and (n.startswith(q) or (q in n and len(n) <= len(q) + 8)
                                                   or SequenceMatcher(None, q, n).ratio() >= threshold)]
+    return _finish(prem, set(hits), stores_only)
+
+
+def _finish(prem, hits, stores_only):
     stores = prem[prem["name_norm"].isin(hits) & (prem["status"] == "Abierto")].copy()
+    if stores_only:
+        stores = stores[is_store(stores)]
     # one physical store can appear twice (shop + its terrace/kiosk unit): collapse points < 30 m apart
     if len(stores) > 1:
         tree = cKDTree(stores[["x", "y"]].values)
@@ -88,9 +130,12 @@ def match_brand(prem: pd.DataFrame, query: str, threshold=0.86):
 
 
 def brand_category(stores: pd.DataFrame):
-    """Most common food-service activity code among the brand's own stores."""
+    """Most common activity code among the brand's own stores (food brands: food-service code)."""
     codes = stores["epigrafes"].dropna().str.split(",").explode()
-    codes = codes[codes.str.startswith("56")]
+    codes = codes[~codes.isin(NON_TRADING_CODES)]
+    food = codes[codes.str.startswith("56")]
+    if len(food) >= 0.5 * max(len(stores), 1):
+        codes = food
     return codes.value_counts().index[0] if len(codes) else None
 
 
@@ -211,18 +256,36 @@ class Result:
     warnings: list = field(default_factory=list)
 
 
-def run(data: Data, query: str, n_sites=5, P=PARAMS) -> Result:
+def run(data: Data, query: str, n_sites=5, P=PARAMS, extra_stores: pd.DataFrame | None = None) -> Result:
+    """extra_stores: brand stores found by other sources (OSM, Google Maps) but missing from the census —
+    DataFrame with x, y, lon, lat, label, sources. They join the brand's network and the training positives."""
     rng = np.random.default_rng(P["seed"])
     prem = data.premises
     stores, matched = match_brand(prem, query)
     warns = []
+    if extra_stores is not None and len(extra_stores):
+        near = cKDTree(prem[["x", "y"]].values).query(extra_stores[["x", "y"]].values)[1]
+        ref = prem.iloc[near]
+        add = pd.DataFrame({"x": extra_stores["x"].values, "y": extra_stores["y"].values,
+                            "lon": extra_stores["lon"].values, "lat": extra_stores["lat"].values,
+                            "district_code": ref["district_code"].values, "barrio_code": ref["barrio_code"].values,
+                            "trade_name": extra_stores["label"].values, "street_type": "", "street_name": extra_stores["label"].values,
+                            "street_number": "", "epigrafes": "561002", "status": "Abierto",
+                            "source": extra_stores["sources"].values},
+                           index=pd.RangeIndex(10**9, 10**9 + len(extra_stores)))
+        stores = pd.concat([stores.assign(source="census"), add])
     if len(stores) < 3:
         raise ValueError(f"Found {len(stores)} open '{query}' premises in the Madrid census — too few to learn from. "
                          "v0.1 needs ≥3 existing stores; brands new to Madrid need the category model (next release).")
     if len(stores) < 15:
         warns.append(f"Only {len(stores)} stores to learn from: suitability scores are indicative, not reliable.")
+    special = stores["barrio_code"].isin(SPECIAL_VENUE_BARRIOS)
+    if special.any():
+        warns.append(f"{int(special.sum())} store(s) at special venues (airport) excluded from learning and from the demand model.")
     category = brand_category(stores)
-    fs = FeatureSpace(data, stores.index, category)
+    all_stores = stores
+    stores = stores[~special]
+    fs = FeatureSpace(data, all_stores.index, category)
 
     # ---- training set: brand stores vs background premises (presence-background design)
     bg_pool = prem[prem["access_type"].isin(["Puerta Calle", "Agrupado"]) & ~prem.index.isin(stores.index)]
@@ -257,7 +320,7 @@ def run(data: Data, query: str, n_sites=5, P=PARAMS) -> Result:
 
     # ---- candidates: vacant street-level units ('Cerrado' = registered but not trading)
     cand = prem[(prem["status"] == "Cerrado") & prem["access_type"].isin(["Puerta Calle", "Agrupado"])
-                & (prem["geom_source"] == "local")].copy()
+                & (prem["geom_source"] == "local") & ~prem["barrio_code"].isin(SPECIAL_VENUE_BARRIOS)].copy()
     cfeat = fs.compute(cand[["x", "y"]].values)
     cand["suitability"] = model.predict_proba(transform(cfeat))[:, 1]
     cand = pd.concat([cand, cfeat.set_index(cand.index)], axis=1)
