@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+# Raw downloads are reproducible from the ingest scripts (~500 MB). Never commit them.
+data/raw/
+data/exports/
+.streamlit/secrets.toml
+bin/
+data/quota.json
+runs/

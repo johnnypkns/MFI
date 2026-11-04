@@ -1,0 +1,11 @@
+# Website (Streamlit Cloud). DB/ingest tooling: requirements-db.txt
+pandas>=2.2
+numpy>=1.26
+scipy>=1.11
+scikit-learn>=1.4
+pyarrow>=15
+requests>=2.31
+streamlit>=1.40
+pydeck>=0.9
+altair>=5
+anthropic>=0.40

@@ -1,0 +1,19 @@
+# Python >= 3.11. Tested 2026-11-04 with the versions in comments.
+pandas>=2.2          # 3.0.5
+numpy>=1.26          # 2.5.3
+geopandas>=1.0       # 1.2.0
+shapely>=2.0         # 2.2.0
+pyogrio>=0.9         # 0.13.0  (reads shapefile/TopoJSON, writes GeoPackage)
+pyproj>=3.6          # 3.8.0
+requests>=2.31       # 2.34.2
+SQLAlchemy>=2.0      # 2.1.8
+psycopg[binary]>=3.1 # 3.3.7
+pytest>=8            # 9.1.1
+# --- model + dashboard (added 2026-11-04)
+scikit-learn>=1.4    # 1.9.1
+scipy>=1.11          # 1.18.1
+pyarrow>=15
+streamlit>=1.40      # 1.66.1
+pydeck>=0.9          # 0.9.3
+altair>=5
+anthropic>=0.40      # 2.4.0  (Claude reasoning layer; optional at runtime)
