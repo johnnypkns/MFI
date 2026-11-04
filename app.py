@@ -13,11 +13,11 @@ import pandas as pd
 import pydeck as pdk
 import streamlit as st
 
-from mfi import quota, reasoning, report, scrape
+from mfi import pipeline, quota, reasoning, report, scrape
 from mfi.model import pnl
 from mfi.model.export import APP
 from mfi.model.robustness import simulate as robustness
-from mfi.model.site_model import FEATURE_LABELS, PARAMS, load_data, run
+from mfi.model.site_model import FEATURE_LABELS, FEATURES, PARAMS, load_data, run
 from mfi.stores import inventory, load_osm, missing_from_census
 
 st.set_page_config(page_title="Madrid Franchise Intelligence", page_icon="📍", layout="wide")
@@ -144,38 +144,45 @@ def registry():
     return pd.read_parquet(APP / "brands.parquet")
 
 
+@st.cache_data(show_spinner=False)
+def listings():
+    return pd.read_parquet(APP / "listings.parquet")
+
+
 @st.cache_resource(show_spinner=False)
 def osm_points():
     return load_osm()[0]
 
 
 @st.cache_resource(show_spinner=False)
-def analyse(brand, n):
-    extra = None
-    reg = registry()
-    row = reg[reg["brand"] == brand]
-    if len(row) and row.iloc[0]["sector"] == "Food & drink":        # OSM layer currently covers food & drink
-        inv, _, _ = inventory(data(), brand, osm_points())
-        extra = missing_from_census(inv)
-    return run(data(), brand, n, extra_stores=extra)
+def run_pipeline(brand, n, m2_range, payback, profile_json):
+    profile = json.loads(profile_json) if profile_json else None
+    return pipeline.analyse(data(), brand, n, listings(), profile, m2_range=m2_range, payback_target=payback, osm=osm_points())
 
 
-@st.cache_resource(show_spinner=False)
-def robust(brand, n, B=200):
-    return robustness(analyse(brand, n), B=B)
+def get_profile(brand, allow_research):
+    prof = pipeline.cached_research(brand)
+    if prof is None and allow_research and reasoning.available():
+        if quota.allow("claude", SS):
+            with st.spinner(f"Step 1/3 · Claude is researching {brand}'s franchise economics on the web (~1 min)…"):
+                prof = reasoning.research_franchise(brand)
+            if prof and prof.get("data"):
+                pipeline.save_research(brand, prof)
+        else:
+            st.warning("Daily research limit reached — ranking without brand economics.")
+    return prof
 
 
-def reset_downstream():
-    for k in ["profile", "rents", "pnl_inputs", "pnl_out", "memo"]:
-        SS.pop(k, None)
+def eur(v):
+    return "—" if v is None or (isinstance(v, float) and not np.isfinite(v)) else f"€{v:,.0f}"
 
 
 # ================================================================== PAGE 1 — ANALYSIS
 def page_analysis():
-    hero("Where should this franchise open next in Madrid? Census, income and commerce data → spatial model → "
-         "Monte Carlo → ranked sites.")
+    hero("Pick a franchise. The engine researches its economics, screens every commercial unit for rent in Madrid, "
+         "simulates each unit's P&L and ranks them by risk-adjusted return.")
     reg = registry()
-    c0, c1, c2, c3 = st.columns([1.4, 3.2, 1.2, 1])
+    c0, c1, c2, c3 = st.columns([1.4, 3.2, 1.1, 1])
     sectors = ["All sectors"] + reg.groupby("sector")["n_stores"].sum().sort_values(ascending=False).index.tolist()
     sector = c0.selectbox("Sector", sectors, label_visibility="collapsed")
     opts = reg[reg["franchisable"] & (reg["n_stores"] >= 3)]
@@ -183,75 +190,110 @@ def page_analysis():
         opts = opts[opts["sector"] == sector]
     names = opts["brand"].tolist()
     label = dict(zip(opts["brand"], opts["brand"] + "  ·  " + opts["sector"] + "  ·  " + opts["n_stores"].astype(str) + " stores"))
-    cur = SS.get("brand", "McDonald's")
-    brand = c1.selectbox("Franchise", names, index=names.index(cur) if cur in names else 0, format_func=lambda b: label.get(b, b),
-                         label_visibility="collapsed", placeholder="Search any brand in Madrid…")
-    pick = None
+    cur = SS.get("brand", "Tierra Burrito Bar")
+    brand = c1.selectbox("Franchise", names, index=names.index(cur) if cur in names else 0,
+                         format_func=lambda b: label.get(b, b), label_visibility="collapsed")
     n_sites = c2.selectbox("Sites", [3, 5, 10], index=[3, 5, 10].index(SS.get("n_sites", 5)),
                            label_visibility="collapsed", format_func=lambda n: f"Top {n} sites")
     go = c3.button("Analyse  →", type="primary", width="stretch")
-    if go or pick or "result" not in SS:
-        try:
-            with st.spinner(f"Running the site model for {brand}…"):
-                R = analyse(brand, n_sites)
-            with st.spinner(f"Monte Carlo: 200 simulations of the model…"):
-                rob = robust(brand, n_sites)
-            if SS.get("brand") != brand or SS.get("n_sites") != n_sites:
-                reset_downstream()
-            SS.update(result=R, rob=rob, brand=brand, n_sites=n_sites)
-            SS.pop("error", None)
-        except ValueError as e:
-            SS["error"] = str(e)
-            SS.pop("result", None)
+
+    prof_cached = pipeline.cached_research(brand)
+    _, _, _, m2_suggest = pipeline.econ_from_profile(prof_cached)
+    with st.expander("Unit & return settings", expanded=False):
+        a, b, c = st.columns(3)
+        m2_default = tuple(SS.get("m2_range") or m2_suggest or pipeline.DEFAULT_M2)
+        m2_range = a.slider("Unit size (m²)", 20, 1500, m2_default, step=10,
+                            help="Prefilled from the franchise's published minimum floor area when Claude has researched it.")
+        payback = b.selectbox("Payback target", [3.0, 4.0, 5.0, 7.0], index=1, format_func=lambda v: f"{v:.0f} years")
+        research_ok = c.toggle("Research the franchise with Claude", value=True,
+                               help="Needed to model money (revenue, costs, investment). Cached per brand after the first run.")
+
+    if go or "out" not in SS or SS.get("brand") != brand:
+        if go or "out" not in SS:
+            prof = get_profile(brand, research_ok)
+            with st.spinner("Step 2/3 · Scoring every listing: location model, demand & competition, cannibalisation…"):
+                with st.spinner("Step 3/3 · Monte Carlo P&L for each candidate unit…"):
+                    try:
+                        out = run_pipeline(brand, n_sites, tuple(m2_range), payback,
+                                           json.dumps(prof, default=str) if prof else "")
+                        SS.update(out=out, brand=brand, n_sites=n_sites, m2_range=tuple(m2_range), payback=payback)
+                        SS.pop("error", None)
+                        SS.pop("memo", None)
+                    except ValueError as e:
+                        SS["error"], SS["brand"] = str(e), brand
+                        SS.pop("out", None)
     if "error" in SS:
         st.error(SS["error"])
         st.stop()
+    if "out" not in SS:
+        st.info("Choose a brand and press **Analyse**.")
+        st.stop()
+    O = SS["out"]
+    R, K, m = O["R"], O["ranked"], O["R"].metrics
+    prof = (O.get("profile") or {}).get("data") or {}
 
-    R, rob, m = SS["result"], SS["rob"], SS["result"].metrics
-    k = st.columns(5)
-    k[0].metric("Existing stores", m["stores"], help="Census + OpenStreetMap, merged and de-duplicated")
-    k[1].metric("Recommended sites", len(R.sites))
-    k[2].metric("Model accuracy", f"{m['auc_spatial_cv']:.2f} AUC" if m["auc_spatial_cv"] else "n/a",
-                help="Spatial cross-validation: whole districts held out, then predicted. 0.5 = coin flip, 1.0 = perfect.")
-    k[3].metric("More stores Madrid can absorb",
-                f"{m['additional_stores_supported']}{'+' if m['additional_stores_supported'] >= R.params['max_sites'] else ''}",
-                help="Stores whose captured demand is ≥50% of a typical existing store, accounting for cannibalisation.")
-    k[4].metric("Same-category competitors", f"{m['competitors']:,}")
+    # ---- banners: eligibility, rent model, reliability, missing economics
+    if prof:
+        elig = prof.get("individual_franchise_available_spain")
+        if elig and elig != "yes":
+            st.error(f"**Franchise availability in Spain: {elig}.** {prof.get('eligibility_explanation', '')}")
+        if O["rent_model"] == "franchisor_property":
+            st.warning("**The franchisor selects and provides the premises** — these units show where demand is strongest; "
+                       "rent is modelled as occupancy % of sales. " + (prof.get("rent_model_explanation") or ""))
     for w in R.warnings:
         (st.error if w.startswith("UNRELIABLE") else st.warning)(w)
+    if not O["econ"]:
+        miss = ", ".join(m.replace("_eur", "").replace("_pct", " %").replace("_", " ") for m in O["missing"])
+        why = (f"Claude's research found no published figure for: **{miss}**" if O.get("profile")
+               else "The franchise hasn't been researched yet")
+        st.info(f"{why}. Without brand economics the units are ranked by *customers per euro of rent* instead of payback.")
+    if not K.get("ok"):
+        st.error(K.get("reason"))
+        st.stop()
+    S = K["sites"]
 
+    k = st.columns(5)
+    k[0].metric("Existing stores", m["stores"], help="Census + OpenStreetMap, merged and de-duplicated")
+    k[1].metric("Units for rent screened", f"{K['log']['listings']:,}")
+    k[2].metric("Pass all filters", f"{K['log']['pass_suitability_gate']:,}",
+                help=" → ".join(f"{a.replace('_', ' ')}: {b:,}" for a, b in K["log"].items()))
+    k[3].metric("Location model", f"{m['auc_spatial_cv']:.2f} AUC · {m['reliability']}",
+                help="Spatial cross-validation (whole districts held out). 0.5 = chance, 1.0 = perfect.")
+    if O["econ"]:
+        k[4].metric(f"#1 · P(payback ≤ {SS.get('payback', 4.0):.0f} yrs)", f"{S['p_payback'].iloc[0]:.0%}")
+    else:
+        k[4].metric("Ranked by", "Demand / €", help="Captured customers per €1k of annual rent")
+
+    show_cand = st.toggle("Show all units that passed the filters", value=False)
     show_comp = st.toggle("Show competitors", value=False)
-    show_alt = st.toggle("Show Monte Carlo alternatives", value=False,
-                         help="Units the optimiser picked most often across the 200 simulations.")
-    legend = ['<span><i class="dot" style="background:#dc2626"></i>Recommended site</span>',
+    legend = ['<span><i class="dot" style="background:#dc2626"></i>Recommended unit (for rent)</span>',
               f'<span><i class="dot" style="background:#111"></i>Existing {R.brand}</span>']
+    if show_cand:
+        legend.append('<span><i class="dot" style="background:#fca5a5"></i>Other qualifying units</span>')
     if show_comp:
         legend.append('<span><i class="dot" style="background:#9ca3af"></i>Competitor</span>')
-    if show_alt:
-        legend.append('<span><i class="dot" style="background:#f59e0b"></i>Monte Carlo alternative</span>')
     st.markdown('<div class="legend">' + "".join(legend) + "</div>", unsafe_allow_html=True)
 
-    sites = R.sites.merge(rob["summary"][["rank", "p_selected", "demand_p10", "demand_p90"]], on="rank")
+    sites = S.copy()
     sites["label"] = sites["rank"].astype(int).astype(str)
-    sites["tip"] = ("<b>#" + sites["label"] + " " + sites["address"] + "</b><br/>" + sites["barrio"].fillna("") + ", "
-                    + sites["district"].fillna("") + "<br/>Suitability " + (sites["suitability"] * 100).round(0).astype(int).astype(str)
-                    + "% · demand " + sites["vs_median_store"].round(2).astype(str) + "× median store<br/>Monte Carlo stability "
-                    + (sites["p_selected"] * 100).round(0).astype(int).astype(str) + "%")
+    fin = (" · EBITDA P50 " + sites["ebitda_p50"].map(eur) + " · P(payback) " + (sites["p_payback"] * 100).round(0).astype(int).astype(str) + "%") \
+        if O["econ"] else ""
+    sites["tip"] = ("<b>#" + sites["label"] + " " + sites["address"].fillna("") + "</b><br/>" + sites["m2"].round(0).astype(int).astype(str)
+                    + " m² · " + sites["rent_month"].map(eur) + "/month" + np.where(sites["traspaso_eur"] > 0, " · traspaso " + sites["traspaso_eur"].map(eur), "")
+                    + "<br/>Demand " + sites["demand_ratio"].round(2).astype(str) + "× a median store" + fin)
     stores = R.stores.copy()
-    stores["tip"] = "<b>" + stores["trade_name"].fillna(R.brand) + "</b><br/>" + stores["address"]
+    stores["tip"] = "<b>" + stores["trade_name"].fillna(R.brand).astype(str) + "</b>"
     layers = [pdk.Layer("GeoJsonLayer", districts_geojson(), stroked=True, filled=False,
                         get_line_color=[90, 90, 90, 110], line_width_min_pixels=1)]
     if show_comp:
         comp = R.competitors.copy()
-        comp["tip"] = "<b>" + comp["trade_name"].fillna("Competitor") + "</b>"
+        comp["tip"] = "<b>" + comp["trade_name"].fillna("Competitor").astype(str) + "</b>"
         layers.append(pdk.Layer("ScatterplotLayer", comp, get_position=["lon", "lat"], get_fill_color=GREY + [140],
                                 get_radius=35, radius_min_pixels=2, pickable=True))
-    if show_alt:
-        alt_df = rob["alternatives"].copy()
-        alt_df["tip"] = ("<b>" + alt_df["street_name"].str.title() + " " + alt_df["street_number"] + "</b><br/>picked in "
-                         + alt_df["times_picked"].astype(str) + "/" + str(rob["B"]) + " simulations")
-        layers.append(pdk.Layer("ScatterplotLayer", alt_df, get_position=["lon", "lat"], get_fill_color=[245, 158, 11, 210],
-                                get_radius=110, radius_min_pixels=6, pickable=True))
+    if show_cand:
+        pool = score_pool(R, K)
+        layers.append(pdk.Layer("ScatterplotLayer", pool, get_position=["lon", "lat"], get_fill_color=[252, 165, 165, 170],
+                                get_radius=45, radius_min_pixels=3, pickable=True))
     layers += [
         pdk.Layer("ScatterplotLayer", stores, get_position=["lon", "lat"], get_fill_color=BLACK + [230],
                   get_radius=70, radius_min_pixels=4, pickable=True),
@@ -263,27 +305,41 @@ def page_analysis():
     ]
     st.pydeck_chart(pdk.Deck(layers=layers, map_provider="carto", map_style="light",
                              initial_view_state=pdk.ViewState(latitude=40.43, longitude=-3.69, zoom=11.2),
-                             tooltip={"html": "{tip}", "style": {"fontSize": "12px"}}), height=620)
+                             tooltip={"html": "{tip}", "style": {"fontSize": "12px"}}), height=600)
 
-    st.subheader("Recommended sites")
-    tbl = pd.DataFrame({
-        "#": sites["rank"].astype(int), "Address": sites["address"], "Barrio": sites["barrio"], "District": sites["district"],
-        "Suitability": sites["suitability"], "Demand vs median store": sites["vs_median_store"],
-        "Demand P10–P90": sites["demand_p10"].round(2).astype(str) + "–" + sites["demand_p90"].round(2).astype(str) + "×",
-        "MC stability": sites["p_selected"],
-        f"Nearest {R.brand} (m)": sites["dist_nearest_brand_m"].round(0), "Competitors ≤500 m": sites["comp_500"],
-        "Income/person ≤1 km": sites["income_1000"].round(0)})
-    st.dataframe(tbl, hide_index=True, width="stretch", column_config={
-        "Suitability": st.column_config.ProgressColumn(format="percent", min_value=0, max_value=1),
-        "MC stability": st.column_config.ProgressColumn(format="percent", min_value=0, max_value=1,
-                                                        help="Share of 200 simulations that pick a unit within 400 m"),
-        "Demand vs median store": st.column_config.NumberColumn(format="%.2f×"),
-        "Income/person ≤1 km": st.column_config.NumberColumn(format="€%d")})
-    st.caption("Candidate sites are vacant street-level units in the municipal census. Full reasoning, rents and "
-               "financials → **Investment report**. How every number is made → **Methodology**.")
+    st.subheader("Recommended units — ranked by " + K["metric"])
+    t = pd.DataFrame({"#": S["rank"].astype(int), "Unit": S["address"], "m²": S["m2"].round(0),
+                      "Rent / month": S["rent_month"], "€/m²": S["eur_m2"].round(1), "Traspaso": S["traspaso_eur"],
+                      "Demand vs median store": S["demand_ratio"], "Location fit": S["suitability"],
+                      f"Nearest {R.brand} (m)": S["dist_nearest_brand_m"].round(0)})
+    cfg = {"Rent / month": st.column_config.NumberColumn(format="€%d"), "Traspaso": st.column_config.NumberColumn(format="€%d"),
+           "Demand vs median store": st.column_config.NumberColumn(format="%.2f×"),
+           "Location fit": st.column_config.ProgressColumn(format="percent", min_value=0, max_value=1)}
+    if O["econ"]:
+        t["Revenue P50"] = S["revenue_p50"]
+        t["EBITDA P10 · P50 · P90"] = S["ebitda_p10"].map(eur) + " · " + S["ebitda_p50"].map(eur) + " · " + S["ebitda_p90"].map(eur)
+        t["P(loss)"] = S["p_loss"]
+        t["Payback P50 (yrs)"] = S["payback_p50"].round(1)
+        t["P(payback ≤ target)"] = S["p_payback"]
+        cfg.update({"Revenue P50": st.column_config.NumberColumn(format="€%d"),
+                    "P(loss)": st.column_config.ProgressColumn(format="percent", min_value=0, max_value=1),
+                    "P(payback ≤ target)": st.column_config.ProgressColumn(format="percent", min_value=0, max_value=1)})
+    t["Listing"] = S["url"]
+    cfg["Listing"] = st.column_config.LinkColumn(display_text="Idealista ↗")
+    st.dataframe(t, hide_index=True, width="stretch", column_config=cfg)
+    st.caption(f"Live Idealista listings (via Apify). Revenue = brand average × demand ratio (capped at the brand's 90th-percentile "
+               f"store, {K['demand_cap']:.2f}×) × model-error noise σ={K['model_error_sigma']:.0%}. Each next pick is re-scored "
+               "after adding the previous ones to the network, so the list accounts for cannibalisation.")
 
-    t3, t4 = st.tabs(["Model diagnostics", "How many stores?"])
-    with t3:
+    t1, t2, t3 = st.tabs(["Filter funnel", "Location model", "Demand calibration"])
+    with t1:
+        f = pd.DataFrame({"step": [s.replace("_", " ") for s in K["log"]], "units": list(K["log"].values())})
+        st.altair_chart(alt.Chart(f).mark_bar(color="#dc2626").encode(
+            x=alt.X("units:Q"), y=alt.Y("step:N", sort=None, title=None, axis=alt.Axis(labelLimit=260)),
+            tooltip=["step", "units"]).properties(height=36 * len(f)), width="stretch")
+        st.caption(f"Size {O['m2_range'][0]}–{O['m2_range'][1]} m² · ground/mezzanine · not industrial · rent consistent with "
+                   "comparable units within 1 km · ≥150 m from the brand's own stores · location fit ≥ the brand's bottom-quartile store.")
+    with t2:
         a, b = st.columns([1.2, 1])
         coef = R.coefficients.copy()
         coef["direction"] = coef["effect"].map(lambda v: "more likely" if v > 0 else "less likely")
@@ -292,200 +348,87 @@ def page_analysis():
             x=alt.X("effect:Q", title="effect on log-odds (per std. dev.)"),
             y=alt.Y("feature:N", sort="-x", title=None, axis=alt.Axis(labelLimit=320)),
             color=alt.Color("direction:N", scale=alt.Scale(domain=["more likely", "less likely"], range=["#dc2626", "#6b7280"]),
-                            legend=None)).properties(height=260), width="stretch")
+                            legend=None)).properties(height=300), width="stretch")
         b.markdown("**Validation**")
-        b.write(f"Spatial-CV AUC **{m['auc_spatial_cv']:.3f}** · folds {m['auc_folds']}")
-        b.write(f"{m['stores']} stores vs {m['background_n']:,} background premises · category `{m['category']}`")
-        b.write(f"Demand: decay **{m['demand_decay_m']} m**, activity weight **{m['demand_activity_weight']:.0f}** "
-                f"(catchment CV {m['demand_calibration_cv']:.2f})")
-        b.write(f"{m['candidates_vacant']:,} vacant units scored → {m['candidates_pass_gate']:,} pass the gate")
-    with t4:
-        cur = R.curve.copy()
-        st.markdown("Each additional store captures less new demand. Stop below **50%** of a typical existing store.")
-        st.altair_chart((alt.Chart(cur).mark_line(point=True, color="#dc2626").encode(
-            x=alt.X("rank:O", title="n-th new store"), y=alt.Y("vs_median_store:Q", title="× median existing store"))
-            + alt.Chart(pd.DataFrame({"y": [0.5]})).mark_rule(strokeDash=[4, 4], color="#111").encode(y="y:Q")
-        ).properties(height=300), width="stretch")
-        if m["additional_stores_supported"] >= R.params["max_sites"]:
-            st.info("The curve never crosses 50% within 15 stores — partly because the census misses stores registered under "
-                    "company names (OSM/Google cross-check pending).")
+        b.write(f"Spatial-CV AUC **{m['auc_spatial_cv']:.3f}** ({m['reliability']}) · folds {m['auc_folds']}")
+        b.write(f"{m['stores']} stores vs {m['background_n']:,} background premises · activity `{m['category']}` · "
+                f"{m['competitors']:,} competitors")
+        b.write(f"Brand demand decay {m['demand_decay_m']} m · daytime-activity weight {m['demand_activity_weight']:.0f}")
+    with t3:
+        cal = data().demand_cal or {}
+        st.markdown(f"Footfall is calibrated on the city's **{cal.get('n_sensors', '?')} permanent pedestrian counters** "
+                    f"({cal.get('sensor_period', '')}).")
+        cc = pd.DataFrame({"Demand measure": ["Residents only", "v0: residents + every premises", "Now: consumer + office premises, industry excluded"],
+                           "Rank correlation with measured footfall": [cal.get("baseline_residents_only"), cal.get("baseline_v0_all_premises"),
+                                                                       cal.get("spearman_in_sample")]})
+        st.dataframe(cc, hide_index=True, width="stretch", column_config={"Rank correlation with measured footfall":
+                     st.column_config.ProgressColumn(format="%.2f", min_value=0, max_value=1)})
+        st.caption(f"Held-out check (each sensor predicted by a fit that never saw it): {cal.get('spearman_leave_one_out', 0):.2f}.")
+
+
+def score_pool(R, K):
+    """All units that passed the filters (for the optional map layer)."""
+    from mfi.model.rank import candidates, score
+    cand, _ = candidates(data(), R, listings(), SS["m2_range"])
+    df = score(R, cand)
+    df = df[df["passes_gate"]].copy()
+    df["tip"] = df["address"].fillna("") + " · " + df["m2"].round(0).astype(int).astype(str) + " m² · €" + df["rent_month"].round(0).astype(int).astype(str)
+    return df[["lon", "lat", "tip"]]
 
 
 # ================================================================== PAGE 2 — INVESTMENT REPORT
 def page_report():
-    hero("The reasoning behind the recommendation: research, scraping, simulations and the investment memo.")
-    if "result" not in SS:
+    hero("The reasoning behind the recommendation: franchise research, the data trail, the simulations and the memo.")
+    if "out" not in SS:
         st.info("Run an analysis on the **Analysis** page first.")
         return
-    R, rob = SS["result"], SS["rob"]
-    st.markdown(f"### {R.brand} · {len(R.sites)} sites")
+    O = SS["out"]
+    R, K = O["R"], O["ranked"]
+    st.markdown(f"### {R.brand}")
+    ok_claude = reasoning.available()
+    a, b = st.columns([1, 3])
+    if a.button("Write investment memo", type="primary", disabled=not ok_claude or not K.get("ok")) and \
+            (quota.allow("claude", SS) or st.error("Daily limit reached.")):
+        with st.spinner("Claude is writing the memo from the evidence pack…"):
+            SS["memo"] = reasoning.write_report(report.evidence_from_pipeline(O))
+    if not ok_claude:
+        b.info("Add `ANTHROPIC_API_KEY` to the app's secrets to enable Claude research and the memo.")
 
-    ok_claude, ok_apify = reasoning.available(), scrape.available()
-    s1, s2, s3, s4 = st.columns(4)
-    s1.markdown(f"**1 · Franchise research**<br><span class='small'>Claude + web search {'✅' if ok_claude else '— needs ANTHROPIC_API_KEY'}</span>", unsafe_allow_html=True)
-    s2.markdown(f"**2 · Rent scrape**<br><span class='small'>Apify → Idealista {'✅' if ok_apify else '— needs APIFY_TOKEN'}</span>", unsafe_allow_html=True)
-    s3.markdown("**3 · P&L Monte Carlo**<br><span class='small'>10,000 draws per site</span>", unsafe_allow_html=True)
-    s4.markdown(f"**4 · Investment memo**<br><span class='small'>Claude, evidence-only {'✅' if ok_claude else ''}</span>", unsafe_allow_html=True)
-
-    b1, b2, b3, b4, b5 = st.columns(5)
-    do_all = b5.button("Run everything ▶", type="primary", width="stretch")
-    limit_msg = "Daily limit reached for this demo — try again tomorrow."
-    if (b1.button("Research", disabled=not ok_claude, width="stretch") or (do_all and ok_claude)) and (quota.allow("claude", SS) or st.error(limit_msg)):
-        with st.spinner("Claude is researching the franchise on the web (~1 min)…"):
-            SS["profile"] = reasoning.research_franchise(R.brand)
-            SS["pnl_inputs"] = report.pnl_inputs_from_research(SS["profile"], SS.get("pnl_inputs"))
-    if (b2.button("Scrape rents", disabled=not ok_apify, width="stretch") or (do_all and ok_apify)) and (quota.allow("apify", SS) or st.error(limit_msg)):
-        rents, prog = {}, st.progress(0.0, "Scraping Idealista listings near each site…")
-        min_m2 = None
-        prof = (SS.get("profile") or {}).get("data") or {}
-        min_m2 = (prof.get("min_floor_area_m2") or {}).get("value")
-        for i, r in enumerate(R.sites.itertuples()):
-            try:
-                rents[int(r.rank)] = scrape.rents_near(r.lat, r.lon, min_m2=min_m2)
-            except Exception as e:
-                st.warning(f"Site #{r.rank}: rent scrape failed — {e}")
-            prog.progress((i + 1) / len(R.sites))
-        SS["rents"] = rents
-        if rents:
-            med = [v["stats"]["p50"] for v in rents.values() if "p50" in v["stats"]]
-            inp = SS.get("pnl_inputs", pnl.empty_inputs()).copy()
-            if med and report.rent_model(SS.get("profile")) == "market_lease":
-                inp.loc[inp.key == "rent_eur_m2_month", ["low", "mode", "high", "source", "label"]] = [
-                    float(np.min(med)), float(np.median(med)), float(np.max(med)), "Idealista via Apify (site medians)", "listing_data"]
-            SS["pnl_inputs"] = inp
-    run_pnl = b3.button("Run P&L", width="stretch") or do_all
-    run_memo = b4.button("Write memo", disabled=not ok_claude, width="stretch") or (do_all and ok_claude)
-
-    prof = (SS.get("profile") or {}).get("data") or {}
-    if prof:
-        elig = prof.get("individual_franchise_available_spain")
-        if elig != "yes":
-            st.error(f"**Eligibility gate:** individual franchise in Spain = **{elig}**. {prof.get('eligibility_explanation', '')}")
-        if prof.get("rent_model") == "franchisor_property":
-            st.warning("**The franchisor chooses and provides the site.** You can't lease one of these units yourself — the map "
-                       "shows where the brand's demand is strongest (useful to argue for a Madrid placement), and the P&L "
-                       "charges occupancy as % of sales instead of market rent. " + (prof.get("rent_model_explanation") or ""))
-    with st.expander("P&L inputs — every number has a source and a label", expanded=not ok_claude):
-        st.caption("Prefilled by Claude's research and the rent scrape. You can override any cell; "
-                   "set label to `user_assumption` when you do. Empty rows block the simulation — nothing is invented.")
-        SS["pnl_inputs"] = st.data_editor(SS.get("pnl_inputs", pnl.empty_inputs()), hide_index=True, width="stretch",
-                                          disabled=["key", "parameter"], key="pnl_editor",
-                                          column_config={"key": None,
-                                                         "label": st.column_config.SelectboxColumn(options=[
-                                                             "verified", "third_party_estimate", "listing_data", "user_assumption", ""])})
-    if run_pnl:
-        site_rents = {k: v["stats"] for k, v in (SS.get("rents") or {}).items()}
-        SS["pnl_out"] = pnl.simulate(R.sites, rob["ratio_draws"], SS["pnl_inputs"], site_rents=site_rents,
-                                     rent_model=report.rent_model(SS.get("profile")))
-    if run_memo and (quota.allow("claude", SS) or st.error(limit_msg)):
-        with st.spinner("Claude is writing the investment memo from the evidence pack…"):
-            ev = report.evidence_pack(R, rob, SS.get("pnl_out"), SS.get("rents"), SS.get("profile"))
-            SS["memo"] = reasoning.write_report(ev)
-
-    tab_memo, tab_trail, tab_sim, tab_fin, tab_market = st.tabs(
-        ["Investment memo", "How we got here", "Robustness Monte Carlo", "P&L Monte Carlo", "Research & scraped data"])
-
-    with tab_memo:
+    t_memo, t_trail, t_fin, t_res = st.tabs(["Investment memo", "How we got here", "P&L Monte Carlo", "Franchise research"])
+    with t_memo:
         if SS.get("memo"):
             st.markdown(SS["memo"])
-            st.download_button("Download memo (.md)", SS["memo"], file_name=f"{R.brand}-madrid-memo.md")
-        elif not ok_claude:
-            st.info("The memo is written by Claude from the evidence pack. Add `ANTHROPIC_API_KEY` to "
-                    "`.streamlit/secrets.toml` and restart. Until then, **How we got here** shows the full computed trail.")
         else:
-            st.info("Press **Run everything** (or the steps one by one).")
-
-    with tab_trail:
+            st.caption("Press **Write investment memo**. Claude may only use numbers from the evidence pack.")
+    with t_trail:
         st.caption("Generated by Python from this exact run — not written by an AI.")
-        for i, (step, detail) in enumerate(report.audit_trail(R, rob, SS.get("pnl_out"), SS.get("rents"), SS.get("profile")), 1):
+        for i, (step, detail) in enumerate(report.trail_from_pipeline(O), 1):
             st.markdown(f'<div class="step"><b>{i}. {step}</b><br>{detail}</div>', unsafe_allow_html=True)
-
-    with tab_sim:
-        s = rob["summary"].copy()
-        st.markdown(f"**{rob['B']} simulations.** Each one re-samples the training data (bootstrap) and redraws the demand "
-                    f"parameters from the 5 best-fitting calibration cells, then re-runs the optimiser.")
-        a, b = st.columns(2)
-        s["site"] = "#" + s["rank"].astype(str) + " " + s["address"]
-        a.markdown("**Stability** — share of simulations picking a unit within 400 m")
-        a.altair_chart(alt.Chart(s).mark_bar(color="#dc2626").encode(
-            x=alt.X("p_selected:Q", axis=alt.Axis(format="%"), title=None, scale=alt.Scale(domain=[0, 1])),
-            y=alt.Y("site:N", sort=None, title=None, axis=alt.Axis(labelLimit=300))).properties(height=40 * len(s)),
-            width="stretch")
-        b.markdown("**Captured demand vs a median existing store** — P10 · P50 · P90")
-        b.altair_chart((alt.Chart(s).mark_rule(strokeWidth=3, color="#9ca3af").encode(
-            x=alt.X("demand_p10:Q", title="× median store"), x2="demand_p90:Q", y=alt.Y("site:N", sort=None, title=None,
-                                                                                         axis=alt.Axis(labelLimit=300)))
-            + alt.Chart(s).mark_point(filled=True, size=90, color="#dc2626").encode(x="demand_p50:Q", y=alt.Y("site:N", sort=None))
-            + alt.Chart(pd.DataFrame({"x": [1]})).mark_rule(strokeDash=[4, 4]).encode(x="x:Q")).properties(height=40 * len(s)),
-            width="stretch")
-        st.markdown("**Units the optimiser picked most often** (show them on the map with the toggle on Analysis)")
-        alt_t = rob["alternatives"].head(10).assign(address=lambda d: d.street_name.str.title() + " " + d.street_number,
-                                                    share=lambda d: d.times_picked / rob["B"])
-        st.dataframe(alt_t[["address", "times_picked", "share"]], hide_index=True,
-                     column_config={"share": st.column_config.ProgressColumn(format="percent", min_value=0, max_value=1)})
-
-    with tab_fin:
-        po = SS.get("pnl_out")
-        if not po:
-            st.info("Not run yet. Fill or prefill the P&L inputs, then **Run P&L**.")
-        elif not po["ok"]:
-            st.warning("Not run — missing inputs: " + ", ".join(po["missing"]) + ". The simulation refuses to fill gaps.")
-        else:
-            f = po["summary"].copy()
-            f["site"] = "#" + f["rank"].astype(str) + " " + f["address"]
-            tgt = f"p_payback_le_{po['payback_target_yrs']:g}y"
-            st.dataframe(pd.DataFrame({
-                "Site": f["site"], "Revenue P50": f["revenue_p50"], "EBITDA P10": f["ebitda_p10"], "EBITDA P50": f["ebitda_p50"],
-                "EBITDA P90": f["ebitda_p90"], "Margin P50": f["margin_p50"], "P(loss)": f["p_loss"],
-                "Payback P50 (yrs)": f["payback_p50_yrs"], f"P(payback ≤ {po['payback_target_yrs']:g}y)": f[tgt],
-                "ROIC P50": f["roic_p50"], "Rent source": f["rent_source"]}), hide_index=True, width="stretch",
-                column_config={**{c: st.column_config.NumberColumn(format="€%d") for c in
-                                  ["Revenue P50", "EBITDA P10", "EBITDA P50", "EBITDA P90"]},
-                               "Margin P50": st.column_config.NumberColumn(format="percent"),
-                               "ROIC P50": st.column_config.NumberColumn(format="percent"),
-                               "P(loss)": st.column_config.ProgressColumn(format="percent", min_value=0, max_value=1),
-                               f"P(payback ≤ {po['payback_target_yrs']:g}y)": st.column_config.ProgressColumn(
-                                   format="percent", min_value=0, max_value=1)})
-            a, b = st.columns(2)
-            a.markdown("**EBITDA range** (P10–P90, dot = P50)")
-            a.altair_chart((alt.Chart(f).mark_rule(strokeWidth=3, color="#9ca3af").encode(
-                x=alt.X("ebitda_p10:Q", title="€ / year"), x2="ebitda_p90:Q", y=alt.Y("site:N", sort=None, title=None,
-                                                                                    axis=alt.Axis(labelLimit=300)))
-                + alt.Chart(f).mark_point(filled=True, size=90, color="#dc2626").encode(x="ebitda_p50:Q", y=alt.Y("site:N", sort=None))
-                ).properties(height=40 * len(f)), width="stretch")
-            pick_rank = b.selectbox("Sensitivity for site", f["rank"].tolist(), format_func=lambda r: f"#{r}")
-            sens = po["sensitivity"][po["sensitivity"]["rank"] == pick_rank].copy()
-            sens["abs"] = sens["spearman"].abs()
-            b.markdown("**What drives EBITDA** (Spearman rank correlation, tornado)")
-            b.altair_chart(alt.Chart(sens).mark_bar().encode(
-                x=alt.X("spearman:Q", scale=alt.Scale(domain=[-1, 1]), title="correlation with EBITDA"),
-                y=alt.Y("driver:N", sort=alt.EncodingSortField("abs", order="descending"), title=None, axis=alt.Axis(labelLimit=320)),
-                color=alt.condition("datum.spearman > 0", alt.value("#dc2626"), alt.value("#6b7280"))).properties(height=300),
-                width="stretch")
-
-    with tab_market:
-        p = SS.get("profile")
-        st.markdown("#### Franchise research (Claude + web search)")
+    with t_fin:
+        if not O["econ"]:
+            st.warning("Not run — missing brand economics: " + ", ".join(O["missing"]))
+        elif K.get("ok"):
+            S = K["sites"].copy()
+            S["site"] = "#" + S["rank"].astype(str) + " " + S["address"].fillna("").str.slice(0, 48)
+            st.markdown("**EBITDA range per unit** (P10–P90, dot = P50) — 10,000 simulations each")
+            st.altair_chart((alt.Chart(S).mark_rule(strokeWidth=3, color="#9ca3af").encode(
+                x=alt.X("ebitda_p10:Q", title="€ / year"), x2="ebitda_p90:Q",
+                y=alt.Y("site:N", sort=None, title=None, axis=alt.Axis(labelLimit=380)))
+                + alt.Chart(S).mark_point(filled=True, size=90, color="#dc2626").encode(x="ebitda_p50:Q", y=alt.Y("site:N", sort=None))
+                ).properties(height=44 * len(S)), width="stretch")
+            econ = pd.DataFrame([{"input": k, "low": v[0], "mode": v[1], "high": v[2]} for k, v in O["econ"].items()])
+            st.markdown("**Brand economics used** (triangular distributions, from Claude's cited research)")
+            st.dataframe(econ, hide_index=True, width="stretch")
+    with t_res:
+        p = O.get("profile")
         if p:
-            st.markdown(p["summary"])
+            st.markdown(p.get("summary") or "")
             if p.get("citations"):
-                st.markdown("**Sources:** " + " · ".join(f"[{c.get('title') or c['url']}]({c['url']})" for c in p["citations"][:15]))
+                st.markdown("**Sources:** " + " · ".join(f"[{c.get('title') or c['url']}]({c['url']})" for c in p["citations"][:20]))
             with st.expander("Structured data"):
                 st.json(p.get("data") or {})
         else:
-            st.caption("Not run.")
-        st.markdown("#### Rent listings (Apify → Idealista)")
-        rents = SS.get("rents")
-        if rents:
-            for k, v in rents.items():
-                st.markdown(f"**Site #{k}** — {v['stats'].get('n', 0)} listings within {v['radius_km']} km · retrieved {v['retrieved']}"
-                            + (f" · €/m²/mo P25 {v['stats']['p25']:.1f} · P50 {v['stats']['p50']:.1f} · P75 {v['stats']['p75']:.1f}"
-                               if "p50" in v["stats"] else ""))
-                if v["listings"]:
-                    st.dataframe(pd.DataFrame(v["listings"])[["address", "m2", "price_month", "eur_m2", "distance_m", "traspaso_eur", "url"]], hide_index=True,
-                                 column_config={"url": st.column_config.LinkColumn()})
-        else:
-            st.caption("Not run.")
+            st.caption("No research for this brand yet.")
 
 
 # ================================================================== PAGE — BRAND DIRECTORY
@@ -526,16 +469,24 @@ def page_directory():
 def page_methodology():
     hero("Exactly what runs behind every number: data, scraping, models, simulations, formulas and their limits.")
     D = data()
-    P = PARAMS
+    cal = D.demand_cal or {}
+    from mfi.model.rank import CAP_QUANTILE, MODEL_ERROR_SIGMA, RENT_OUTLIER
 
-    st.markdown("## 1 · Pipeline")
+    st.markdown("## 1 · Pipeline (one click)")
     st.graphviz_chart("""
     digraph { rankdir=LR; node [shape=box, style="rounded,filled", fillcolor="#f9fafb", color="#d1d5db", fontname="Helvetica", fontsize=11];
       edge [color="#9ca3af"];
-      subgraph cluster_d { label="Data"; style=dashed; color="#d1d5db"; census [label="Premises census\\n(Ayto. Madrid)"]; padron [label="Padrón\\n(Ayto. Madrid)"]; ine [label="Income atlas\\n(INE)"]; geo [label="Boundaries\\n(Ayto. Madrid)"]; idea [label="Idealista rents\\n(Apify)"]; web [label="Franchise facts\\n(Claude web search)"]; }
-      feat [label="Feature space\\n7 features / location"]; logit [label="Suitability model\\nlogistic regression\\n+ spatial CV"]; huff [label="Huff demand model\\ncalibrated"]; opt [label="Greedy optimiser\\n(cannibalisation)"];
-      mc1 [label="Robustness\\nMonte Carlo", fillcolor="#fee2e2"]; mc2 [label="P&L\\nMonte Carlo", fillcolor="#fee2e2"]; memo [label="Investment memo\\n(Claude, evidence-only)", fillcolor="#111827", fontcolor="white"];
-      census -> feat; padron -> feat; ine -> feat; geo -> feat; feat -> logit -> opt; feat -> huff -> opt; opt -> mc1 -> mc2; idea -> mc2; web -> mc2; mc2 -> memo; mc1 -> memo; web -> memo; }""")
+      subgraph cluster_d { label="Data"; style=dashed; color="#d1d5db";
+        census [label="Premises census\\n+ Padrón + INE income\\n(Ayto. Madrid, INE)"]; osm [label="OpenStreetMap\\nstores, metro, offices"];
+        ped [label="31 pedestrian\\ncounters"]; idea [label="Idealista listings\\n(Apify)"]; web [label="Franchise economics\\n(Claude web search)"]; }
+      reg [label="Brand registry\\n+ store inventory"]; dem [label="Demand surface\\n(calibrated on footfall)"];
+      logit [label="Location model\\nlogistic + spatial CV"]; huff [label="Huff demand &\\ncompetition"];
+      filt [label="Listing filters\\nsize · floor · zone · rent sanity"]; mc [label="P&L Monte Carlo\\nper listing", fillcolor="#fee2e2"];
+      rank [label="Greedy ranking\\n(cannibalisation)", fillcolor="#fee2e2"]; memo [label="Investment memo\\n(Claude, evidence-only)", fillcolor="#111827", fontcolor="white"];
+      census -> reg; osm -> reg; census -> dem; osm -> dem; ped -> dem; reg -> logit; dem -> logit; dem -> huff; reg -> huff;
+      web -> filt; idea -> filt; filt -> logit; logit -> rank; huff -> mc; web -> mc; idea -> mc; mc -> rank; rank -> memo; web -> memo; }""")
+    st.markdown("Order matters: **research → filter real listings → score → simulate the money → rank**. Money decides the ranking; "
+                "it is not a grade applied afterwards.")
 
     st.markdown("## 2 · Data")
     src = pd.DataFrame(D.meta["sources"])
@@ -550,93 +501,95 @@ def page_methodology():
     src["What it gives"] = src.source_key.map(lambda k: labels.get(k, ("", "?"))[1])
     src["Resolution"] = src.source_key.map(lambda k: labels.get(k, ("", "", "?"))[2])
     src["Data date"] = src.data_reference_date.fillna(src.retrieved_at).astype(str).str[:10]
-    st.dataframe(src[["Dataset", "What it gives", "Resolution", "Data date", "url"]], hide_index=True, width="stretch",
-                 column_config={"url": st.column_config.LinkColumn("Source")})
+    extra = pd.DataFrame([
+        {"Dataset": "Aforos de peatones (300321)", "What it gives": f"{cal.get('n_sensors', 31)} permanent pedestrian counters, hourly",
+         "Resolution": "Point", "Data date": "2022–2024", "url": "https://datos.madrid.es/dataset/300321-0-aforos-peatones-bicicletas"},
+        {"Dataset": "OpenStreetMap", "What it gives": "7,448 food places · metro/rail · bus · offices · universities · malls",
+         "Resolution": "Point", "Data date": "2026-11-04", "url": "https://www.openstreetmap.org"},
+        {"Dataset": "Idealista (via Apify)", "What it gives": f"{len(listings()):,} commercial units for rent (after cleaning)",
+         "Resolution": "Point", "Data date": "2026-11-04", "url": "https://www.idealista.com"},
+    ])
+    st.dataframe(pd.concat([src[["Dataset", "What it gives", "Resolution", "Data date", "url"]], extra]), hide_index=True,
+                 width="stretch", column_config={"url": st.column_config.LinkColumn("Source")})
     st.markdown("""
-- **Publisher / licence:** Ayuntamiento de Madrid open-data portal (CC BY 4.0) and INE (attribution). Downloaded by script,
-  SHA-256 fingerprinted, archived unchanged; re-runs keep history instead of overwriting.
-- **Quality checks:** 18 automated checks on every ingest (boundary counts, geometry validity, population totals, income units,
-  geocoding coverage, code consistency). A failed check blocks the build.
-- **Claude franchise research:** web search over official franchise sites, filings, Spanish franchise directories.
-  Every figure carries a URL and a label — `verified` or `third_party_estimate`.
+- **Licences:** Ayuntamiento de Madrid open data (CC BY 4.0), INE (attribution), OpenStreetMap (ODbL). Downloads are SHA-256
+  fingerprinted and archived unchanged; re-runs keep history.
+- **Quality checks:** 18 automated checks on every ingest. A failed check blocks the build.
+- **Brand registry:** 1,353 chains detected from trade names on open premises — generic names ("BAR", sign types like
+  "muestra opaca") removed, spelling variants merged, sector from licences, cross-checked with OpenStreetMap.
 """)
 
     st.markdown("## 3 · Scraping")
     st.dataframe(pd.DataFrame([
-        {"What": "Commercial premises for rent", "Site": "Idealista", "Tool": "Apify actor igolaizola/idealista-scraper",
-         "Query": "rent · premises · within 1 km of each site · min size = brand's floor area", "Used for": "Rent €/m²/month per site (P25/P50/P75)",
-         "Listed cost": "~$0.001 per listing"},
-        {"What": "Places + ratings + review counts", "Site": "Google Maps", "Tool": "Apify actor compass/crawler-google-places",
-         "Query": "brand + category within 2 km", "Used for": "Store cross-check; reviews as observed demand (v0.2)",
-         "Listed cost": "$0.004 per place"},
+        {"What": "Every commercial unit for rent in Madrid", "Site": "Idealista", "Tool": "Apify · igolaizola/idealista-scraper",
+         "Query": "rent · premises · Madrid municipality · split into 6 size bands (2,500-result cap per search)",
+         "Used for": "The candidate set: rent, m², floor, traspaso, link", "Listed cost": "~$0.001 / listing"},
+        {"What": "Places + ratings + review counts", "Site": "Google Maps", "Tool": "Apify · compass/crawler-google-places",
+         "Query": "citywide by category (next)", "Used for": "Store confirmation; reviews as observed demand",
+         "Listed cost": "$0.004 / place"},
     ]), hide_index=True, width="stretch")
-    st.markdown("Raw responses are archived as JSON with the query and timestamp (`data/raw/apify/`). Scraping Idealista and "
-                "Google Maps goes against their terms of use; the project owner has accepted that for research use.")
+    st.markdown("Listing cleaning: commercial only (no warehouses) · €200–€100k/month · 20–3,000 m² · €3–200/m² · de-duplicated · "
+                f"inside Madrid · €/m² within {RENT_OUTLIER[0]:.0%}–{RENT_OUTLIER[1]:.0f}× the median of comparable units within 1 km "
+                "(catches typos like '€350/month for 100 m² on Castellana'). Raw responses archived with query and timestamp. "
+                "Scraping Idealista and Google Maps is against their terms; accepted by the project owner for research use.")
 
     st.markdown("## 4 · Features (per location)")
-    st.dataframe(pd.DataFrame({"Feature": list(FEATURE_LABELS.values()),
-                               "Transform": ["log(1+x)", "log(1+x)", "share", "log", "log(1+x)", "log(1+x)", "log(1+x)"],
-                               "Source": ["Padrón", "Padrón", "Padrón", "INE ADRH", "Census of premises", "Census of premises",
-                                          "Census of premises (brand's activity code)"]}), hide_index=True, width="stretch")
-    st.caption("Section values are assigned to the section's representative point; radius sums use straight-line distance.")
+    src_map = {"pop_500": "Padrón", "pop_1000": "Padrón", "young_share_1000": "Padrón", "income_1000": "INE ADRH",
+               "footfall": "Census + pedestrian counters", "office_500": "Census (office licences)",
+               "transit_300": "OpenStreetMap", "food_300": "Census", "comp_500": "Census + brand registry"}
+    st.dataframe(pd.DataFrame({"Feature": [FEATURE_LABELS[f] for f in FEATURES],
+                               "Transform": ["share" if f == "young_share_1000" else "log" if f == "income_1000" else "log(1+x)" for f in FEATURES],
+                               "Source": [src_map[f] for f in FEATURES]}), hide_index=True, width="stretch")
 
     st.markdown("## 5 · Models & formulas")
-    st.markdown("**5.1 Suitability — where does this brand choose to be?** Logistic regression, presence vs background "
-                f"(brand stores vs ~{P['background_ratio']}× random street-level premises), standardised features $z$:")
-    st.latex(r"P(\text{store}\mid \mathbf{x}) = \frac{1}{1+e^{-(\beta_0+\boldsymbol\beta^\top \mathbf z)}},\qquad z_j=\frac{f_j(x_j)-\mu_j}{\sigma_j}")
-    st.markdown("Validated by **spatial cross-validation**: folds are whole districts, so the model is always scored on territory "
-                "it never saw. Metric = **AUC**, the probability that a random real store scores above a random background point:")
-    st.latex(r"\text{AUC}=P\big(\hat p(\text{store}) > \hat p(\text{background})\big)\quad(0.5=\text{chance},\;1=\text{perfect})")
-    st.markdown(f"**Gate:** a candidate must score at least the {P['gate_quantile']:.0%} quantile of the brand's existing stores.")
-
-    st.markdown("**5.2 Demand.** Each census section $i$ supplies residents $R_i$ plus daytime activity — open premises $A_i$ "
-                "(a jobs/visitors proxy) weighted by $k$:")
-    st.latex(r"D_i = R_i + k\,A_i")
-    st.markdown("**5.3 Huff gravity model — who wins each section's demand.** Pull of store $j$ on section $i$ decays with distance; "
-                "demand splits across the brand's stores $S$, competitors $C$ and an outside option $w_0$:")
+    st.markdown("**5.1 Demand surface — calibrated on measured footfall.** Premises are classed by licence: *consumer* (shops, food, "
+                "services, clinics, education), *office* (professional, public administration) and *industrial* (manufacturing, "
+                "wholesale, logistics — excluded). For a point $p$:")
+    st.latex(r"F(p)=\sum_i \big(R_i + a\,C_i + b\,O_i\big)\,e^{-d(p,i)/\lambda} + c\cdot\text{stations}_{300m}(p)")
+    st.markdown(f"$a, b, \\lambda, c$ maximise the rank correlation between $F$ and the mean weekday count at the city's "
+                f"{cal.get('n_sensors', 31)} pedestrian counters. Result: **ρ = {cal.get('spearman_in_sample', 0):.2f}** "
+                f"(held-out sensors {cal.get('spearman_leave_one_out', 0):.2f}) vs residents only {cal.get('baseline_residents_only', 0):.2f} "
+                f"and the old all-premises proxy {cal.get('baseline_v0_all_premises', 0):.2f}. λ = {cal.get('lambda_m')} m.")
+    st.markdown("**5.2 Location model — where does this brand choose to be?** Logistic regression, brand stores vs background "
+                "street-level premises, standardised features $z$, validated by **spatial cross-validation** (whole districts held out):")
+    st.latex(r"P(\text{store}\mid \mathbf{x}) = \frac{1}{1+e^{-(\beta_0+\boldsymbol\beta^\top \mathbf z)}},\qquad "
+             r"\text{AUC}=P\big(\hat p(\text{store}) > \hat p(\text{background})\big)")
+    st.markdown("Reliability label: AUC < 0.60 **unreliable** (red banner) · 0.60–0.70 weak · 0.70–0.80 usable · > 0.80 good. "
+                f"**Gate:** a listing must score at least the bottom-quartile existing store.")
+    st.markdown("**5.3 Huff gravity model — who wins each section's demand.** Pull decays with distance; demand splits across the "
+                "brand's stores $S$, competitors $C$ (same activity class or any known chain in it) and an outside option $w_0$:")
     st.latex(r"w_{ij}=e^{-d_{ij}/\lambda}\,\mathbb 1[d_{ij}\le 3\text{ km}],\qquad "
-             r"\text{Captured}(S)=\sum_i D_i\,\frac{\sum_{s\in S}w_{is}}{\sum_{s\in S}w_{is}+\sum_{c\in C}w_{ic}+w_0}")
-    st.markdown("**5.4 Calibration — $\\lambda$ and $k$ are fitted, not assumed.** Every existing store is viable, so the right demand "
-                "definition gives them the most even catchments. Grid search over "
-                "λ ∈ {300…2000 m} × k ∈ {0…40}, minimising the coefficient of variation of each store's leave-one-out capture:")
-    st.latex(r"(\lambda^*,k^*)=\arg\min_{\lambda,k}\ \mathrm{CV}\big(\{\text{Captured}(S)-\text{Captured}(S\setminus\{s\})\}_{s\in S}\big)")
-    st.markdown("**5.5 Optimiser — which sites, and how many.** Greedy maximisation of *incremental* captured demand. Adding a site "
-                "next to the brand's own store gains little, so cannibalisation is built in:")
-    st.latex(r"j^*=\arg\max_{j}\ \text{Captured}(S\cup\{j\})-\text{Captured}(S),\qquad S\leftarrow S\cup\{j^*\}")
-    st.markdown(f"Picks ≥{P['min_spacing_m']} m apart. **How many:** keep adding while the next store captures ≥"
-                f"{P['saturation_ratio']:.0%} of a median existing store.")
+             r"\text{Own}_j=\sum_i D_i\,\frac{w_{ij}}{\sum_{s\in S\cup\{j\}}w_{is}+\sum_{c\in C}w_{ic}+w_0}")
+    st.markdown("Brand demand $D_i = R_i + k\\,(C_i+O_i)$; $\\lambda$ and $k$ are fitted per brand so its existing stores have the "
+                "most even catchments. **Demand ratio** = $\\text{Own}_j$ ÷ the median existing store's own capture, capped at the "
+                f"brand's {CAP_QUANTILE:.0%}-percentile store (a new unit can't outperform the brand's own busiest stores).")
 
-    st.markdown("## 6 · Simulations")
-    st.markdown("**6.1 Robustness Monte Carlo (B = 200).** Each draw: bootstrap-resample stores and background, refit the "
-                "suitability model; draw (λ, k) from the 5 best calibration cells, weighted by fit; re-run the optimiser.")
-    st.latex(r"\text{Stability}_j=\frac{1}{B}\sum_{b=1}^{B}\mathbb 1\big[\exists\,\text{pick within }400\text{ m of }j\text{ in draw }b\big]")
-    st.markdown("Also reported: the site's demand ratio vs a median store at P10/P50/P90 across draws.")
-    st.markdown("**6.2 P&L Monte Carlo (N = 10,000 per site).** Inputs are triangular distributions (low, mode, high), each with "
-                "its source. Site demand is drawn from the robustness simulation, so model uncertainty flows into the money:")
-    st.latex(r"\text{Revenue}=\text{AUV}\times r_{\text{site}},\qquad "
-             r"\text{EBITDA}=\text{Revenue}\,(1-c_{\text{food}}-c_{\text{labour}}-c_{\text{royalty}}-c_{\text{mkt}}-c_{\text{other}})-\text{rent}\cdot m^2\cdot 12")
-    st.latex(r"\text{Payback}=\frac{I}{\text{EBITDA}},\quad \text{ROIC}=\frac{\text{EBITDA}}{I},\quad "
-             r"\text{Break-even revenue}=\frac{\text{rent}\cdot m^2\cdot 12}{1-\sum c}")
-    st.markdown("Reported: P10/P50/P90 of revenue and EBITDA, P(loss), median payback, P(payback ≤ 4 yrs), ROIC. "
-                "**Sensitivity:** Spearman rank correlation of each input with EBITDA (tornado chart). "
-                "If any input is missing the simulation does not run.")
+    st.markdown("## 6 · Simulations & ranking")
+    st.markdown(f"**6.1 P&L Monte Carlo (N = 4,000 per candidate during ranking, 10,000 for the final picks).** Brand inputs are "
+                "triangular distributions (low, mode, high) from Claude's cited research; rent, m² and traspaso are the listing's own:")
+    st.latex(r"\text{Rev}=\text{AUV}\times r_j\times\varepsilon,\ \ \varepsilon\sim\text{LogNormal}(0,\sigma),\qquad "
+             r"\text{EBITDA}=\text{Rev}\,(1-\textstyle\sum c)-\text{rent}_{\text{listing}}\times 12")
+    st.latex(r"\text{Payback}=\frac{I_{\text{brand}}+\text{traspaso}}{\text{EBITDA}},\qquad \text{ROIC}=\frac{\text{EBITDA}}{I}")
+    st.markdown(f"σ = {MODEL_ERROR_SIGMA:.0%} model error (assumption). Brands where the franchisor provides the premises use "
+                "occupancy as % of sales instead of listing rent. Missing inputs → no simulation; nothing is invented.")
+    st.markdown("**6.2 Ranking.** Primary: **P(payback ≤ target)**; tie-break: median EBITDA. Greedy: after each pick the unit joins "
+                "the brand's network and every remaining candidate is re-scored, so the list accounts for cannibalisation; picks "
+                "≥ 400 m apart. Without brand economics the metric is *customers per €1k of annual rent*.")
 
     st.markdown("## 7 · Claude's role")
     st.markdown("""
 | Task | What Claude does | What it may not do |
 |---|---|---|
-| Franchise research | Web search; extracts fees, investment, royalties, revenue disclosures, Spain eligibility; cites each figure | Invent a number; present a non-Spain figure as Spanish |
-| Investment memo | Writes the verdict and site-by-site reasoning from the evidence pack | Use any number not in the evidence pack; change model outputs |
+| Franchise research (step 1, cached per brand) | Web search; eligibility in Spain, who provides premises, fees, investment, revenue, cost ratios, unit size — each cited and labelled | Invent a number; present a non-Spain figure as Spanish |
+| Investment memo | Verdict and unit-by-unit reasoning from the evidence pack | Use any number not in the evidence pack; change model outputs |
 """)
     st.markdown("## 8 · Limitations")
     st.markdown("""
-- **Store coverage:** existing stores come from the census by trade name; stores filed under company names are missed (OSM/Google cross-check next).
-- **Demand:** residents + a daytime-activity proxy. No measured footfall yet (Google review counts next).
+- **Listings coverage:** ~2,500 units; Idealista caps results per search, so coverage may be incomplete.
+- **Revenue:** brand average × modelled demand; no measured sales per store. Google review counts (next) will calibrate demand on real visits.
+- **Footfall calibration:** 31 sensors, mostly central shopping streets.
 - **Distance:** straight-line, not walking network.
-- **Sites:** vacant census units; size and availability unverified unless a listing matches.
-- **Rent model:** brands where the franchisor provides the property (e.g. McDonald's Spain) are modelled with occupancy as % of
-  sales; the recommended units are then demand evidence, not leasable sites.
-- **Money:** revenue assumed proportional to captured demand (elasticity 1); EBITDA pre-tax, unlevered.
+- **Units:** as advertised; licence (e.g. hostelería smoke extraction), condition and frontage are not verified.
 - **Not yet built:** survival model on 2014–2026 openings/closures; out-of-time backtest (train 2019 → predict 2024).
 """)
 

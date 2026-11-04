@@ -1,0 +1,416 @@
+{
+ "summary": "**Telepizza (Madrid): analyst summary**\n\n- **Eligibility:** Individuals can franchise it in Spain. Telepizza España says it is looking for businesspeople and franchisees. The franchisor is Telepizza SAU, part of Food Delivery Brands. It is not a master franchise in Spain. Master-franchise deals exist only for other regions.\n- **Fee and investment:** The official site says investment starts from €80,000 and there is no entry fee. Directories quote higher totals, from about €150,000 to €100,000–300,000.\n- **Royalty and marketing:** Directories (Tormo, franquicia.net) show 6% royalty and 4% advertising. Older listings show 5% and 3%. I found no official figure.\n- **Premises:** I found no franchise disclosure document. Telepizza helps with the site search and pre-opening steps, which points to a market lease that you find and sign yourself. I found no evidence of franchisor-owned sites or rent charged as a % of sales. Confirm this directly with Telepizza.\n- **Sales per unit:** There is no official figure. A well-located unit can exceed €400,000 a year. Spain chain sales were €369.4M in 2018.\n- **Risks:** Food Delivery Brands lost €48.19M in 2025. It bought 16 franchised stores in Spain and plans more company-run stores. One press report says an audit questions its continuity.",
+ "data": {
+  "brand": "Telepizza",
+  "individual_franchise_available_spain": "yes",
+  "eligibility_explanation": "Telepizza SAU (Food Delivery Brands) recruits individual franchisees directly in Spain (telepizza.es/info/franquicias.html, franquiciastelepizza.es). It is not a master franchise in Spain. Master-franchise agreements apply to other regions (franquicia.net). The group is buying back franchised stores and expanding company-run stores (2025 accounts), so ask about territory availability in Madrid.",
+  "operator_in_spain": "Telepizza SAU / Food Delivery Brands, S.A.",
+  "spain_store_count": {
+   "value": 700,
+   "year": null,
+   "source": "https://www.telepizza.es/info/franquicias.html (says 'más de 700'; franquiciastelepizza.es says '+650'; 715 in 2022 per El Español)"
+  },
+  "franchise_fee_eur": {
+   "value": 0,
+   "source": "https://franquiciastelepizza.es/",
+   "label": "verified (official site says no entry fee; some directories list a fee by population, e.g. franquicialist €24,000)"
+  },
+  "min_floor_area_m2": {
+   "value": 45,
+   "source": "https://feriadefranquicias.com/es/franquicias/franquicias/telepizza (from 45 m2 depending on model; standard stores 80 m2 per infofranquicias.com and franquishop)"
+  },
+  "rent_model": "market_lease",
+  "rent_model_explanation": "Telepizza advises on site search, design and build, but no source says the franchisor owns the site or charges rent as % of sales. The franchisee appears to lease on the open market, subject to franchisor approval. This is an inference with no FDD, so confirm with the franchisor.",
+  "pnl_inputs": {
+   "auv_eur": {
+    "low": 400000,
+    "mode": 520000,
+    "high": 800000,
+    "source": "https://franquicialist.com/franquicia/telepizza ; https://www.fooddeliverybrands.com/pdf/Telepizza-report.pdf ; https://sivarious.com/gestion/la-facturacion-media-en-las-franquicias-de-restauracion-ronda-los-800-000-euros-20230519-0846/",
+    "label": "third_party_estimate",
+    "note": "Low = 'can exceed €400k' (franquicialist). Mode = my approximation: 2018 Spain chain sales €369.4M divided by about 715 stores (the 2022 count, so mixed years). High = sector average for franchised restaurants (~€800k). No Telepizza or Madrid-specific AUV was found."
+   },
+   "unit_m2": {
+    "low": 45,
+    "mode": 100,
+    "high": 160,
+    "source": "https://sivarious.com/gestion/estos-son-los-pecios-para-abrir-una-franquicia-de-telepizza-20211104-0600/ ; https://feriadefranquicias.com/es/franquicias/franquicias/telepizza",
+    "label": "third_party_estimate",
+    "note": "Formats: delta 80-100 m2, traditional 140-160 m2, small or shopping-centre units 45-80 m2. Mode is my judgement for Madrid."
+   },
+   "cogs_pct": {
+    "low": 28,
+    "mode": 32,
+    "high": 35,
+    "source": "https://www.skello.es/blog/rentabilidad-restaurante",
+    "label": "third_party_estimate",
+    "note": "Spanish quick-service restaurant benchmark (food cost 30-35%), widened to 28%. Not Telepizza-specific. Includes packaging and product bought from the franchisor's factory."
+   },
+   "labour_pct": {
+    "low": 22,
+    "mode": 27,
+    "high": 30,
+    "source": "https://www.skello.es/blog/rentabilidad-restaurante ; https://chefbusiness.co/como-mejorar-rentabilidad-restaurante/",
+    "label": "third_party_estimate",
+    "note": "Benchmark for Spanish fast-food/take-away (20-30%). Delivery-heavy models may sit toward the high end."
+   },
+   "royalty_pct": {
+    "low": 5,
+    "mode": 6,
+    "high": 6,
+    "source": "https://tormofranquicias.es/telepizza/ ; https://www.franquicia.net/sector/franquicias-de-hosteleria-y-restauracion/telepizza/",
+    "label": "third_party_estimate",
+    "note": "Current directories say 6%. Older listings (emprendedores.es, asest) say 5%. Not confirmed by an official page."
+   },
+   "marketing_pct": {
+    "low": 3,
+    "mode": 4,
+    "high": 4,
+    "source": "https://tormofranquicias.es/telepizza/",
+    "label": "third_party_estimate",
+    "note": "Advertising levy. 4% in current directories, 3% in older ones."
+   },
+   "other_opex_pct": {
+    "low": 16,
+    "mode": 20,
+    "high": 25,
+    "source": "https://miselup.pro/blog/costes-de-un-restaurante-estructura-y-porcentajes/",
+    "label": "third_party_estimate",
+    "note": "Spanish restaurant benchmark: rent 6-10% + utilities 2-5% + other operating costs 8-10%. Includes market-lease rent, so occupancy is not shown separately. Delivery-platform commissions may add more. Excludes depreciation and financing."
+   },
+   "investment_eur": {
+    "low": 80000,
+    "mode": 150000,
+    "high": 300000,
+    "source": "https://franquiciastelepizza.es/ (low, verified) ; https://diarioempresarial.es/cuanto-cuesta-abrir-franquicia-telepizza/ (mode) ; https://www.franquicia.net/sector/franquicias-de-hosteleria-y-restauracion/telepizza/ (high)",
+    "label": "low verified (official 'desde'); mode and high third_party_estimate",
+    "note": "Excludes any lease deposit or working capital that the franchisor figure may not cover. Ask what is included. Mode is a press-department figure, not specific to Madrid."
+   }
+  },
+  "notes": [
+   "Mode cost lines sum to about 89% of sales, which leaves roughly 11% pre-depreciation margin. Asest (third party) says 10-15% net; skello says 8-12% for fast food. This is not a Telepizza-verified figure.",
+   "No Spanish franchise disclosure document or official unit economics were found. Use the Spanish pre-contract information the franchisor must provide.",
+   "Contract term is 10 years, not renewable according to feriadefranquicias. Minimum population is 12,000-15,000.",
+   "Franchisor risk: Food Delivery Brands lost €48.19M in 2025 on €286M revenue and EBITDA of €29.8M (eleconomista.es, July 2026). It acquired 16 Spanish franchised stores and intends more company-run stores. A 2024 press report (xataka.com) cites an audit questioning continuity."
+  ]
+ },
+ "citations": [
+  {
+   "url": "https://www.telepizza.es/info/franquicias.html",
+   "title": "Franquicias Telepizza",
+   "kind": "cited"
+  },
+  {
+   "url": "https://franquiciastelepizza.es/",
+   "title": "Abre tu franquicia TELEPIZZA",
+   "kind": "cited"
+  },
+  {
+   "url": "https://diarioempresarial.es/cuanto-cuesta-abrir-franquicia-telepizza/",
+   "title": "¿Cuánto cuesta abrir una franquicia de Telepizza?",
+   "kind": "cited"
+  },
+  {
+   "url": "https://www.franquicia.net/sector/franquicias-de-hosteleria-y-restauracion/telepizza/",
+   "title": "Franquicia Telepizza",
+   "kind": "cited"
+  },
+  {
+   "url": "https://tormofranquicias.es/telepizza/",
+   "title": "Telepizza - Franquicias de éxito",
+   "kind": "cited"
+  },
+  {
+   "url": "https://franquicialist.com/franquicia/telepizza",
+   "title": "Franquicia Telepizza",
+   "kind": "cited"
+  },
+  {
+   "url": "https://www.fooddeliverybrands.com/pdf/Telepizza-report.pdf",
+   "title": "TELEPIZZA GROUP, S.A. Y SOCIEDADES DEPENDIENTES",
+   "kind": "cited"
+  },
+  {
+   "url": "https://www.eleconomista.es/retail-consumo/noticias/14001337/07/26/el-dueno-de-telepizza-reduce-un-45-sus-perdidas-hasta-los-4819-millones-de-euros.html",
+   "title": "El dueño de Telepizza reduce un 45% sus pérdidas hasta los 48,19 millones de euros",
+   "kind": "cited"
+  },
+  {
+   "url": "https://www.xataka.com/empresas-y-economia/nostalgia-no-podra-salvar-a-telepizza-empresa-se-ahoga-mercado-que-ella-creo",
+   "title": "La crisis silenciosa de Telepizza: la pionera del delivery en España ha entrado en números rojo en plena era del delivery",
+   "kind": "cited"
+  },
+  {
+   "url": "https://www.franquiciashoy.es/franquicias/franquicias-de-hosteleria-y-restauracion/pizzerias/telepizza",
+   "title": "Franquicia Telepizza España",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.emprendedores.es/franquicias/telepizza/",
+   "title": "Telepizza",
+   "kind": "searched"
+  },
+  {
+   "url": "https://asest.es/story/cuanto-vale-una-franquicia-de-telepizza/",
+   "title": "Descubre Cuánto Invertir para Abrir una Franquicia de Telepizza y Triunfa - Asest",
+   "kind": "searched"
+  },
+  {
+   "url": "https://feriadefranquicias.com/es/franquicias/franquicias/telepizza",
+   "title": "Franquicia Telepizza",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.franquicias.net/franquicia/telepizza",
+   "title": "Franquicia Telepizza, negocio de éxito de pizzerías",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.franquiciasderestauracion.es/franquicias/franquicias-de-hosteleria-y-restauracion/pizzerias/telepizza",
+   "title": "Franquicia TELEPIZZA - Franquicia de Pizzerías",
+   "kind": "searched"
+  },
+  {
+   "url": "https://rolty.com/franquicias/telepizza",
+   "title": "Telepizza: franquicia, inversión y datos",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.elespanol.com/invertia/empresas/distribucion/20230215/duena-telepizza-apuntala-expansion-mercado-iberico-reestructuracion/741426171_0.html",
+   "title": "La dueña de Telepizza apuntala su plan de expansión en el mercado ibérico para 2026 tras la reestructuración",
+   "kind": "searched"
+  },
+  {
+   "url": "https://en.wikipedia.org/wiki/Telepizza",
+   "title": "Telepizza",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.nrn.com/restaurant-franchising/pizza-hut-unloads-its-jeno-s-and-telepizza-brands-in-latin-america",
+   "title": "Pizza Hut unloads its Jeno’s and Telepizza brands in Latin America",
+   "kind": "searched"
+  },
+  {
+   "url": "https://en.wikipedia.org/wiki/Apache_Pizza",
+   "title": "Apache Pizza",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.mundofranquicia.com/franquicia/restauracion/restaurantes/telepizza/",
+   "title": "Telepizza",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.franquishop.com/franquicia-telepizza",
+   "title": "Franquicia TELEPIZZA",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.lafranquicia.es/franquicia/telepizza/",
+   "title": "Franquicia Telepizza",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.franquiciasfranquishop.es/franquicia-telepizza",
+   "title": "Franquicia TELEPIZZA",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.generaldefranquicias.com/franquicia/telepizza/",
+   "title": "◉ Franquicia Telepizza",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.infofranquicias.com/fd-235/franquicias/Telepizza.aspx",
+   "title": "Franquicia Telepizza valorada",
+   "kind": "searched"
+  },
+  {
+   "url": "https://sivarious.com/gestion/estos-son-los-pecios-para-abrir-una-franquicia-de-telepizza-20211104-0600/",
+   "title": "Estos son los precios para abrir una franquicia de Telepizza",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.portaldelcomerciante.com/es/articulo/preguntas-frecuentes",
+   "title": "Preguntas frecuentes - Portal del comerciante",
+   "kind": "searched"
+  },
+  {
+   "url": "https://villajoyosa.portaldelcomerciante.com/es/seccion/ver/franquicia-preguntas-frecuentes",
+   "title": "Rincón del emprendedor >> La franquicia >> Preguntas frecuentes",
+   "kind": "searched"
+  },
+  {
+   "url": "https://catarroja.portalemp.com/preguntas-frecuentes-la-franquicia.html",
+   "title": "La franquicia - SERVICIO DESARROLLO LOCAL",
+   "kind": "searched"
+  },
+  {
+   "url": "https://almussafes.portalemp.com/tramites.html?lng=es",
+   "title": "Preguntas frecuentes - Ajuntament de Almussafes",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.bbva.es/finanzas-vistazo/ae/cuentas/como-crear-una-franquicia.html",
+   "title": "Cómo crear una franquicia: guía paso a paso y requisitos",
+   "kind": "searched"
+  },
+  {
+   "url": "https://lexpress-franchise.com/es/franquicia/telepizza/",
+   "title": "Abrir una franquicia Telepizza - Pizzerías",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.eleconomista.es/retail-consumo/noticias/12607487/01/24/telepizza-se-pone-a-dieta-y-reduce-su-tamano-a-la-mitad-para-ser-rentable.html",
+   "title": "La dueña Telepizza se pone a dieta y reduce su tamaño a la mitad para ser rentable",
+   "kind": "searched"
+  },
+  {
+   "url": "https://sivarious.com/gestion/la-facturacion-media-en-las-franquicias-de-restauracion-ronda-los-800-000-euros-20230519-0846/",
+   "title": "Las franquicias de restauración rondan los 800.000 euros",
+   "kind": "searched"
+  },
+  {
+   "url": "https://es.statista.com/estadisticas/692108/evolucion-del-porcentaje-de-pizzerias-franquiciadas-de-la-cadena-telepizza",
+   "title": "evolucion del porcentaje de pizzerias franquiciadas de la cadena telepizza",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.upf.edu/documents/2963149/3508563/8.doc",
+   "title": "www.upf.edu",
+   "kind": "searched"
+  },
+  {
+   "url": "https://es.statista.com/estadisticas/914507/evolucion-de-los-beneficios-de-telepizza-en-el-mundo",
+   "title": "evolucion de los beneficios de telepizza en el mundo",
+   "kind": "searched"
+  },
+  {
+   "url": "https://restauracion.substack.com/p/16-just-eat-duda-con-espana-telepizza",
+   "title": "#16 Just Eat duda con España, Telepizza monta el pollo",
+   "kind": "searched"
+  },
+  {
+   "url": "https://lexpress-franchise.com/es/ultimas-noticias/telepizza-reduce-perdidas/",
+   "title": "El dueño de Telepizza reduce sus pérdidas un 45 %: todos los datos",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.foodretail.es/horeca/noticias/la-duena-de-telepizza-factura-un-13-menos-en-2025-y-no-logra-salir-de-numeros-rojos.html",
+   "title": "La dueña de Telepizza factura un 1,3% menos en 2025 y no logra salir de números rojos",
+   "kind": "searched"
+  },
+  {
+   "url": "https://ejecutivos.es/noticias/food-delivery-brands-reduce-un-45-sus-perdidas-en-2025-hasta-482-millones/",
+   "title": "Food Delivery Brands reduce un 45% sus pérdidas en 2025, hasta 48,2 millones - Revista Ejecutivos",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.cantabriaeconomica.com/la-economia-hoy/food-delivery-brands-recorta-un-45-sus-perdidas-en-2025/",
+   "title": "Food Delivery Brands recorta un 45% sus pérdidas en 2025 - Cantabria Económica",
+   "kind": "searched"
+  },
+  {
+   "url": "https://business-people.es/economia/food-delivery-brands-recorta-un-45-sus-perdidas-y-acelera-su-reestructuracion/",
+   "title": "Food Delivery Brands recorta un 45% sus pérdidas y acelera su reestructuración - Business People España",
+   "kind": "searched"
+  },
+  {
+   "url": "https://sivarious.com/operaciones/el-dueno-de-telepizza-recorta-un-45-sus-perdidas-hasta-los-4819-millones-de-euros-20260721-1149/",
+   "title": "El dueño de Telepizza recorta un 45% sus pérdidas hasta los 48,19 millones de euros",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.pressdigital.es/articulo/economia/2026-07-20/5959286-food-delivery-brands-recorta-45-perdidas-2025",
+   "title": "Food Delivery Brands recorta un 45% sus pérdidas en 2025",
+   "kind": "searched"
+  },
+  {
+   "url": "https://hedillaabogados.com/food-delivery-brands-franquiciados/",
+   "title": "Telepizza sube los precios a los franquiciados - Hedilla Abogados",
+   "kind": "searched"
+  },
+  {
+   "url": "https://quefranquicia.com/montar/telepizza-pizzerias-abrir/",
+   "title": "Abrir franquicia TELEPIZZA - Pizzerías",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.telepizza.es/info/franquicias",
+   "title": "Franquicias Telepizza",
+   "kind": "searched"
+  },
+  {
+   "url": "https://lexpress-franchise.com/es/articulos/como-alquilar-un-local-para-tu-franquicia/",
+   "title": "¿Cómo alquilar un local para tu franquicia?",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.infofranquicias.com/fd-235/franquicias/direcciones/Telepizza.aspx",
+   "title": "Direcciones de franquicias y unidades propias de Telepizza",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.hispanidad.com/economia/food-delivery-brands-telepizza-pizza-hut-se-atraganta-por-reestructuracion-inflacion-eleva-perdidas-47-hunde-ebitda-pese-mayores-ventas_12044884_102.html",
+   "title": "Food Delivery Brands (Telepizza y Pizza Hut) se atraganta...",
+   "kind": "searched"
+  },
+  {
+   "url": "https://business-people.es/economia/telepizza-vuelve-a-perdidas-y-acelera-su-retirada-de-latinoamerica/",
+   "title": "Food Delivery Brands registra pérdidas de 48 millones en 2024 aunque mantiene su ebitda en positivo - Business People",
+   "kind": "searched"
+  },
+  {
+   "url": "https://restauracion.substack.com/p/14-ranking-de-ventas-cadena-en-espana",
+   "title": "#14: Ventas de Do Eat!, comenzamos #datajaime",
+   "kind": "searched"
+  },
+  {
+   "url": "https://lexpress-franchise.com/es/articulos/abrir-restaurante-comida-rapida/",
+   "title": "Cómo abrir un restaurante de comida rápida en 2026 en España",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.barcelonaculinaryhub.com/blog/gastos-restaurante",
+   "title": "Gastos de un restaurante: tipos, porcentajes y cómo controlarlos",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.skello.es/blog/rentabilidad-restaurante",
+   "title": "Cómo calcular y mejorar la rentabilidad de tu restaurante",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.caixabanklab.com/elbullifoundation/es/consumos-beneficios-restaurante/",
+   "title": "CONSUMOS Y BENEFICIOS DE UN RESTAURANTE - CaixaBankLab",
+   "kind": "searched"
+  },
+  {
+   "url": "https://miselup.pro/blog/costes-de-un-restaurante-estructura-y-porcentajes/",
+   "title": "Costes de un restaurante: estructura y % (2026) — Miselup",
+   "kind": "searched"
+  },
+  {
+   "url": "https://cartanorte.es/recursos/coste-personal-restaurante/",
+   "title": "Coste de personal en un restaurante: ¿el problema está en la plantilla o en las ventas?",
+   "kind": "searched"
+  },
+  {
+   "url": "https://modelosdeplandenegocios.com/blogs/news/restaurante-comida-rapida-plan-financiero",
+   "title": "Restaurante de comida rápida: el plan financiero (Excel)",
+   "kind": "searched"
+  },
+  {
+   "url": "https://chefbusiness.co/como-mejorar-rentabilidad-restaurante/",
+   "title": "Cómo Mejorar la Rentabilidad de un Restaurante: Guía Práctica 2026 — ChefBusiness",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.gastronomiarentable.com/post/estructura-de-costos-para-un-restaurante",
+   "title": "Estructura de costos para un restaurante",
+   "kind": "searched"
+  }
+ ],
+ "model": "claude-sonnet-5-5",
+ "searches": 9
+}

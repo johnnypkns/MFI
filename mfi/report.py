@@ -78,7 +78,7 @@ def audit_trail(R, rob=None, pnl_out=None, rents=None, profile=None):
 
 def evidence_pack(R, rob=None, pnl_out=None, rents=None, profile=None):
     cols = ["rank", "address", "barrio", "district", "suitability", "incremental_demand", "vs_median_store",
-            "dist_nearest_brand_m", "comp_500", "shops_200", "food_300", "income_1000", "pop_1000", "young_share_1000"]
+            "dist_nearest_brand_m", "comp_500", "footfall", "transit_300", "office_500", "food_300", "income_1000", "pop_1000", "young_share_1000"]
     ev = {
         "brand": R.brand,
         "audit_trail": [{"step": a, "detail": b} for a, b in audit_trail(R, rob, pnl_out, rents, profile)],
@@ -112,4 +112,70 @@ def evidence_pack(R, rob=None, pnl_out=None, rents=None, profile=None):
     if profile:
         ev["franchise_research"] = {"summary": profile.get("summary"), "data": profile.get("data"),
                                     "citations": profile.get("citations")}
+    return ev
+
+
+# ---------------------------------------------------------------- pipeline (money-first) versions
+def trail_from_pipeline(O):
+    R, K, m = O["R"], O["ranked"], O["R"].metrics
+    prof = (O.get("profile") or {}).get("data") or {}
+    steps = []
+    if prof:
+        steps.append(("Franchise research (Claude + web search)",
+                      f"Individual franchise in Spain: {prof.get('individual_franchise_available_spain')}. Premises: "
+                      f"{O['rent_model'].replace('_', ' ')}. {len((O.get('profile') or {}).get('citations') or [])} sources."))
+    else:
+        steps.append(("Franchise research", "Not run — ranking falls back to customers per euro of rent."))
+    steps += [
+        ("Brand stores", f"{m['stores']} open stores found (municipal census + OpenStreetMap, merged within 120 m; offices, "
+                         f"warehouses and airport units excluded)."),
+        ("Competitors", f"{m['competitors']:,} open premises in the brand's activity class `{m['category']}` or belonging to "
+                        "a known chain in that class."),
+        ("Location model", f"Logistic regression, {m['stores']} stores vs {m['background_n']:,} background premises, 9 features "
+                           f"(residents, income, age, calibrated footfall, offices, metro/rail, food density, competitors). "
+                           f"Spatial-CV AUC {_fmt(m['auc_spatial_cv'], 3)} → {m['reliability']}."),
+        ("Strongest drivers", "; ".join(f"{r.feature} ({r.effect:+.2f})" for r in R.coefficients.head(3).itertuples())),
+        ("Demand model", f"Huff gravity model over 2,462 census sections; demand = residents + {m['demand_activity_weight']:.0f} × "
+                         f"consumer & office premises (industrial excluded), decay {m['demand_decay_m']} m, calibrated on the brand's network."),
+    ]
+    if K.get("ok"):
+        lg = K["log"]
+        steps.append(("Listings funnel", " → ".join(f"{k.replace('_', ' ')} {v:,}" for k, v in lg.items())))
+        steps.append(("Ranking", f"Metric: {K['metric']}. Pool of {K['pool']} best units re-scored after each pick "
+                                 f"(cannibalisation). Demand capped at {K['demand_cap']:.2f}× a median store."))
+        S = K["sites"]
+        if O["econ"]:
+            steps.append(("P&L Monte Carlo", "10,000 draws per unit, own rent and traspaso. Median EBITDA: " + ", ".join(
+                f"#{int(r['rank'])} €{r.ebitda_p50:,.0f} (P(loss) {r.p_loss:.0%})" for _, r in S.iterrows())))
+    return steps
+
+
+def evidence_from_pipeline(O):
+    R, K = O["R"], O["ranked"]
+    cols = [c for c in ["rank", "address", "neighbourhood", "m2", "rent_month", "eur_m2", "local_eur_m2", "traspaso_eur",
+                        "suitability", "demand_ratio", "dist_nearest_brand_m", "comp_500", "footfall", "transit_300",
+                        "office_500", "income_1000", "pop_1000", "revenue_p50", "ebitda_p10", "ebitda_p50", "ebitda_p90",
+                        "p_loss", "payback_p50", "p_payback", "invest_p50", "roic_p50", "rent_share", "url"]
+            if K.get("ok") and c in K["sites"].columns]
+    ev = {
+        "brand": R.brand,
+        "audit_trail": [{"step": a, "detail": b} for a, b in trail_from_pipeline(O)],
+        "model_metrics": R.metrics, "model_warnings": R.warnings,
+        "top_drivers": R.coefficients.round(3).to_dict("records"),
+        "ranking_metric": K.get("metric"), "listings_funnel": K.get("log"),
+        "recommended_units": K["sites"][cols].round(3).to_dict("records") if K.get("ok") else [],
+        "brand_economics_used": {k: list(v) for k, v in (O["econ"] or {}).items()},
+        "missing_economics": O["missing"], "rent_model": O["rent_model"], "unit_size_range_m2": O["m2_range"],
+        "caveats": [
+            "Revenue = brand average x demand ratio (capped at the brand's 90th-percentile store) x model-error noise.",
+            "Demand ratios come from a gravity model calibrated on the brand's network and on 31 pedestrian counters; "
+            "no measured sales per store.",
+            "Distances are straight-line, not walking network.",
+            "Listings are as advertised on Idealista; condition, licence status and exact frontage are not verified.",
+            "EBITDA is pre-tax, before depreciation and financing.",
+        ],
+    }
+    if O.get("profile"):
+        ev["franchise_research"] = {"summary": O["profile"].get("summary"), "data": O["profile"].get("data"),
+                                    "citations": O["profile"].get("citations")}
     return ev

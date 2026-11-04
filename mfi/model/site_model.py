@@ -44,13 +44,16 @@ PARAMS = dict(
     seed=7,
 )
 
-FEATURES = ["pop_500", "pop_1000", "young_share_1000", "income_1000", "shops_200", "food_300", "comp_500"]
+FEATURES = ["pop_500", "pop_1000", "young_share_1000", "income_1000", "footfall", "office_500", "transit_300",
+            "food_300", "comp_500"]
 FEATURE_LABELS = {
     "pop_500": "Residents within 500 m", "pop_1000": "Residents within 1 km",
     "young_share_1000": "Share aged 15–44 within 1 km", "income_1000": "Net income/person within 1 km (€)",
-    "shops_200": "Open premises within 200 m (footfall proxy)", "food_300": "Open food & drink within 300 m",
+    "footfall": "Footfall index (calibrated on pedestrian counters)", "office_500": "Offices within 500 m (daytime workers)",
+    "transit_300": "Metro/rail stations within 300 m", "food_300": "Open food & drink within 300 m",
     "comp_500": "Same-category competitors within 500 m",
 }
+INDUSTRIAL_SHARE_MAX = 0.5      # candidate sites in industrial/wholesale zones are excluded
 
 
 @dataclass
@@ -59,11 +62,25 @@ class Data:
     sections: pd.DataFrame
     meta: dict
     barrios: pd.DataFrame
+    generators: pd.DataFrame | None = None
+    demand_cal: dict | None = None
+    _surface: object = None
+
+    def surface(self):
+        """Layer 2 demand surface (built once)."""
+        if self._surface is None:
+            from ..demand import DemandSurface, TO_UTM
+            g = self.generators.copy()
+            g["x"], g["y"] = TO_UTM.transform(g["lon"].values, g["lat"].values)
+            self._surface = DemandSurface(self.premises, self.sections, g)
+        return self._surface
 
 
 def load_data(app_dir=APP) -> Data:
+    gen = pd.read_parquet(app_dir / "generators.parquet") if (app_dir / "generators.parquet").exists() else None
+    cal = json.loads((app_dir / "demand.json").read_text()) if (app_dir / "demand.json").exists() else None
     return Data(pd.read_parquet(app_dir / "premises.parquet"), pd.read_parquet(app_dir / "sections.parquet"),
-                json.loads((app_dir / "meta.json").read_text()), pd.read_parquet(app_dir / "barrios.parquet"))
+                json.loads((app_dir / "meta.json").read_text()), pd.read_parquet(app_dir / "barrios.parquet"), gen, cal)
 
 
 # ------------------------------------------------------------------ brand + category
@@ -172,9 +189,11 @@ class FeatureSpace:
         self.sec_inc = s["net_income_per_person"].fillna(s["net_income_per_person"].median()).values
         self.sec_tree = cKDTree(self.sec_xy)
         op = p[is_open(p)]
-        act = op.groupby("section_spatial").size()
-        self.sec_activity = s["section_code"].map(act).fillna(0).values.astype(float)  # open premises per section
-        self.shop_tree = cKDTree(op[["x", "y"]].values)
+        self.surf = data.surface()
+        self.cal = data.demand_cal
+        # daytime activity per section = consumer-facing + office premises (industrial/wholesale excluded: Layer 2)
+        sd = self.surf.sec.set_index("section_code")
+        self.sec_activity = s["section_code"].map(sd["consumer"] + sd["office"]).fillna(0).values.astype(float)
         food = op[op["divisions"].fillna("").str.contains("56")]
         self.food_tree = cKDTree(food[["x", "y"]].values)
         comp = op[competitor_mask(op, category)] if category else op.iloc[:0]
@@ -196,7 +215,10 @@ class FeatureSpace:
             "pop_1000": pop1k,
             "young_share_1000": np.where(pop1k > 0, young1k / np.maximum(pop1k, 1), np.nan),
             "income_1000": inc1k,
-            "shops_200": [len(i) for i in self.shop_tree.query_ball_point(xy, 200)],
+            "footfall": self.surf.potential(xy, self.cal["a_consumer"], self.cal["b_office"], self.cal["lambda_m"],
+                                            self.cal["c_station"]),
+            "office_500": self.surf.count("office", xy, 500),
+            "transit_300": self.surf.stations_within(xy, 300),
             "food_300": [len(i) for i in self.food_tree.query_ball_point(xy, 300)],
             "comp_500": [len(i) for i in self.comp_tree.query_ball_point(xy, 500)] if self.comp_tree else 0,
         })
@@ -205,7 +227,7 @@ class FeatureSpace:
 
 def transform(f):
     out = f.copy()
-    for c in ["pop_500", "pop_1000", "shops_200", "food_300", "comp_500"]:
+    for c in ["pop_500", "pop_1000", "footfall", "office_500", "transit_300", "food_300", "comp_500"]:
         out[c] = np.log1p(out[c])
     out["income_1000"] = np.log(out["income_1000"].clip(lower=1))
     return out[FEATURES]
@@ -250,6 +272,11 @@ class Huff:
         w = np.exp(-d / self.P["huff_decay_m"])
         w[d > self.P["huff_cutoff_m"]] = 0
         return w
+
+    def own_capture(self, brand_w_sum, w):
+        """Demand a single store with pull w captures itself, given the brand's total pull brand_w_sum
+        (which may or may not already include w)."""
+        return (self.pop * w / (brand_w_sum + self.base)).sum()
 
     def captured(self, brand_w_sum):
         """Residents captured by the brand given the summed pull of its stores per section."""
@@ -341,6 +368,8 @@ def run(data: Data, query: str, n_sites=5, P=PARAMS, extra_stores: pd.DataFrame 
     # ---- candidates: vacant street-level units ('Cerrado' = registered but not trading)
     cand = prem[(prem["status"] == "Cerrado") & prem["access_type"].isin(["Puerta Calle", "Agrupado"])
                 & (prem["geom_source"] == "local") & ~prem["barrio_code"].isin(SPECIAL_VENUE_BARRIOS)].copy()
+    ind = data.surface().industrial_share(cand[["x", "y"]].values, 200)
+    cand = cand[ind <= INDUSTRIAL_SHARE_MAX].copy()
     cfeat = fs.compute(cand[["x", "y"]].values)
     cand["suitability"] = model.predict_proba(transform(cfeat))[:, 1]
     cand = pd.concat([cand, cfeat.set_index(cand.index)], axis=1)
@@ -404,5 +433,7 @@ def run(data: Data, query: str, n_sites=5, P=PARAMS, extra_stores: pd.DataFrame 
     res.calibration = grid
     # context kept for the Monte Carlo layer (robustness.py) — avoids recomputing features
     res.ctx = dict(fs=fs, X=X, y=y, groups=groups, cand=cand, cand_X=transform(cand[FEATURES]), stores_xy=stores[["x", "y"]].values,
-                   store_X=transform(store_feat), comp_xy=comp_xy, pool_index=pool.index, median_store=median_store)
+                   store_X=transform(store_feat), comp_xy=comp_xy, pool_index=pool.index, median_store=median_store,
+                   model=model, huff=huff, brand_w_sum=brand_w.sum(1), base_captured=base_captured, gate=gate,
+                   store_capture=np.array([huff.own_capture(brand_w.sum(1), brand_w[:, j]) for j in range(brand_w.shape[1])]))
     return res

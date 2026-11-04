@@ -1,0 +1,353 @@
+{
+ "summary": "## Goiko: summary\n\n**An individual cannot franchise Goiko in Spain.** Goiko doesn't franchise in Spain. In 2024 it directly ran 117 restaurants in Spain and France. After L Catterton bought the chain, all locations belonged to the fund and it stopped granting franchises. The only route for an investor is a territorial alliance such as Canarias, Baleares or Portugal, not a single unit. That route doesn't cover Madrid.\n\n**Operator:** The parent is InternationalBurgerCo. Capza took control at the end of 2025 and holds 98% (a third-party figure). Other sources say about 90%.\n\n**Health:** 2025 sales fell 11% to €109M. Net loss was €36.4M.\n\n**Premises:** There is no franchise model, so no franchisee premises model exists. I labelled `rent_model` \"market_lease\" only as an assumption, because the company leases its own sites. No source states the occupancy terms.\n\n**Figures:** Fee, royalty, investment and floor area are null. Old directory figures (€12–50k fee, €80–190k fit-out) come from low-quality sites that describe a franchise that doesn't exist, so I excluded them. Cost ratios are generic Spanish restaurant benchmarks, not Goiko data. Rent is bundled into `other_opex`.\n\n**Recommendation:** Don't plan around Goiko. Consider franchised Spanish burger brands that offer individual units.",
+ "data": {
+  "brand": "Goiko (Goiko Grill)",
+  "individual_franchise_available_spain": "no",
+  "eligibility_explanation": "Goiko is company-run in Spain (117 own restaurants in 2024) and has not franchised since L Catterton's 2018 purchase. Expansion outside its own operation is through territorial joint ventures (Canarias, Baleares, Andorra, Portugal), not single-unit franchises. No Madrid franchise exists.",
+  "operator_in_spain": "InternationalBurgerCo (Goiko), controlled by Capza since late 2025",
+  "spain_store_count": {
+   "value": 113,
+   "year": 2026,
+   "source": "https://burgerbreton.com/en/brands/goiko/ (third_party_estimate; cites the official restaurant finder, Oct 2026). Filing-based: 111 Goiko + 6 Basic by Goiko in Spain in 2024, https://lexpress-franchise.com/es/ultimas-noticias/goiko-dispara-perdidas-36-millones/"
+  },
+  "franchise_fee_eur": {
+   "value": null,
+   "source": null,
+   "label": null
+  },
+  "min_floor_area_m2": {
+   "value": null,
+   "source": null
+  },
+  "rent_model": "market_lease",
+  "rent_model_explanation": "Assumption only: there is no franchise, so no franchisee premises model exists. Goiko operates its own sites and its occupancy terms are not published. No source shows a franchisor-property or % of sales occupancy arrangement.",
+  "pnl_inputs": {
+   "auv_eur": {
+    "low": null,
+    "mode": 930000,
+    "high": null,
+    "source": "Derived: €109M 2025 sales (https://www.hispanidad.com/economia/goiko-se-atraganta-en-2025-reduce-ventas-11-dispara-perdidas-160_20000017_102.html) / 117 restaurants (2024 count, lexpress-franchise URL above)",
+    "label": "third_party_estimate",
+    "note": "Group-level average. Includes delivery and the 700 m2 flagship. Uses the 2024 store count because the 2025 count is unknown."
+   },
+   "unit_m2": {
+    "low": 250,
+    "mode": null,
+    "high": 400,
+    "source": "https://www.alimarket.es/restauracion/noticia/292614/goiko-grill-llega-a-dos-nuevas-localidades (Sabadell 250 m2, Castellón 400 m2)",
+    "label": "third_party_estimate",
+    "note": "Two press-reported units. The Puerta del Sol flagship is 700 m2 and is excluded as an outlier."
+   },
+   "cogs_pct": {
+    "low": 28,
+    "mode": 31,
+    "high": 35,
+    "source": "https://www.jac-consulting.com/costes-hosteleria ; https://www.covermanager.com/es/blog/como-calcular-umbral-rentabilidad-restaurante",
+    "label": "third_party_estimate",
+    "note": "Generic Spanish restaurant benchmark, not Goiko-specific."
+   },
+   "labour_pct": {
+    "low": 30,
+    "mode": 33,
+    "high": 35,
+    "source": "https://miselup.pro/blog/costes-de-un-restaurante-estructura-y-porcentajes/",
+    "label": "third_party_estimate",
+    "note": "Generic Spanish restaurant benchmark, including social security."
+   },
+   "royalty_pct": {
+    "low": null,
+    "mode": null,
+    "high": null,
+    "source": null,
+    "label": null,
+    "note": "No franchise exists, so there is no royalty."
+   },
+   "marketing_pct": {
+    "low": 0,
+    "mode": 0,
+    "high": 0,
+    "source": null,
+    "label": null,
+    "included_in": "other_opex",
+    "note": "Bundled in other_opex to avoid double counting."
+   },
+   "other_opex_pct": {
+    "low": 16,
+    "mode": 21,
+    "high": 27,
+    "source": "https://miselup.pro/blog/costes-de-un-restaurante-estructura-y-porcentajes/ ; https://www.covermanager.com/es/blog/como-calcular-umbral-rentabilidad-restaurante",
+    "label": "third_party_estimate",
+    "note": "Includes market rent (6–12%), utilities (2–5%), other operating costs (8–10%) and marketing. Madrid-weighted high end. This is the author's sum of benchmark ranges, not a single source figure."
+   },
+   "investment_eur": {
+    "low": null,
+    "mode": null,
+    "high": null,
+    "source": null,
+    "label": null,
+    "note": "No credible Goiko-specific figure. The €80–190k fit-out figures on montarnegocios.es are unverified and describe a non-existent franchise."
+   }
+  },
+  "notes": [
+   "No Spain-specific or non-Spain FDD exists for Goiko.",
+   "Capza stake: ~90% (CB Insights/Expansión, Jan 2026) vs 98% (burgerbreton, citing El Debate).",
+   "Sales are falling (-11% in 2025) and losses are record (€36.4M), so any partner or investor route carries brand risk.",
+   "The 2015 El Economista piece says three of six early locations were franchised with a founder-friendly arrangement. That model has been discontinued.",
+   "Directory pages (btopadvisor, infofranquicias) show no fee, royalty or area data."
+  ]
+ },
+ "citations": [
+  {
+   "url": "https://lexpress-franchise.com/es/ultimas-noticias/goiko-dispara-perdidas-36-millones/",
+   "title": "Goiko dispara sus pérdidas a 36,4 millones en 2025",
+   "kind": "cited"
+  },
+  {
+   "url": "https://www.franquicia.net/sector/franquicias-de-hosteleria-y-restauracion/goiko-grill/",
+   "title": "Franquicia Goiko Grill",
+   "kind": "cited"
+  },
+  {
+   "url": "https://burgerbreton.com/en/brands/goiko/",
+   "title": "Goiko: History, Key Facts and Reviews",
+   "kind": "cited"
+  },
+  {
+   "url": "https://www.hispanidad.com/economia/goiko-se-atraganta-en-2025-reduce-ventas-11-dispara-perdidas-160_20000017_102.html",
+   "title": "Goiko se atraganta en 2025: reduce ventas un 11% y dispara pérdidas un 160%",
+   "kind": "cited"
+  },
+  {
+   "url": "https://asest.es/story/goiko-grill-franquicia/",
+   "title": "Descubre Todo Sobre Goiko Grill: Franquicia, Requisitos, Inversión y Rentabilidad que No Puedes Ignorar - Asest",
+   "kind": "searched"
+  },
+  {
+   "url": "https://conectacuenca.cl/noticias/cuanto-cuesta-la-franquicia-goiko-grill/",
+   "title": "Franquicia Goiko Grill: Precio y Requisitos 2024",
+   "kind": "searched"
+  },
+  {
+   "url": "https://conectacuenca.cl/noticias/montar-franquicia-goiko-grill/",
+   "title": "Franquicia Goiko Grill: Guía completa para montar tu propio restaurante",
+   "kind": "searched"
+  },
+  {
+   "url": "https://conectacuenca.cl/noticias/goiko-grill-abrir-franquicia/",
+   "title": "Abrir una Franquicia Goiko Grill: Requisitos y Proceso",
+   "kind": "searched"
+  },
+  {
+   "url": "https://mutatio.es/publicaciones/goiko-grill-abrir-franquicia-1029/",
+   "title": "Abrir una Franquicia Goiko Grill: Guía Completa y Requisitos",
+   "kind": "searched"
+  },
+  {
+   "url": "https://montarnegocios.es/cuanto-cuesta-montar-la-framquicia-goico/",
+   "title": "¿Cuánto cuesta montar la franquicia Goiko en España? - Montar Negocios",
+   "kind": "searched"
+  },
+  {
+   "url": "https://mutatio.es/publicaciones/cuanto-cuesta-la-franquicia-goiko-grill-11672/",
+   "title": "Cuánto Cuesta una Franquicia Goiko Grill: Inversión y Rentabilidad",
+   "kind": "searched"
+  },
+  {
+   "url": "https://mutatio.es/publicaciones/montar-franquicia-goiko-grill-7426/",
+   "title": "Cómo Montar una Franquicia Goiko Grill: Guía Paso a Paso",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.eleconomista.es/emprendedores-pymes/noticias/7076830/10/15/La-eclosion-de-Goiko-Grill-de-pequena-hamburgueseria-a-expandirse-por-Espana.html",
+   "title": "La eclosión de Goiko Grill, de pequeña hamburguesería a expansión nacional",
+   "kind": "searched"
+  },
+  {
+   "url": "https://btopadvisor.com/franquicias/goiko-grill_f2721",
+   "title": "Opiniones sobre la franquicia Goiko Grill",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.infofranquicias.com/fd-45823/franquicias/Goyko-Grill.aspx",
+   "title": "Franquicia Goyko Grill valorada",
+   "kind": "searched"
+  },
+  {
+   "url": "https://montarnegocios.es/cuanto-cuesta-montar-una-franquicia-goiko-grill/",
+   "title": "¿Cuánto cuesta montar una franquicia Goiko Grill en España? - Montar Negocios",
+   "kind": "searched"
+  },
+  {
+   "url": "https://mutatio.es/publicaciones/coste-franquicia-goiko-grill-5930/",
+   "title": "Coste Franquicia Goiko Grill: ¿Es una Inversión Rentable? Análisis Detallado",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.foodretail.es/horeca/restauracion-organizada/goiko-vendio-12-millones-de-hamburguesas-kevin-bacon-en-espana-en-2025.html",
+   "title": "Goiko vendió 1,2 millones de hamburguesas 'Kevin Bacon' en España en 2025",
+   "kind": "searched"
+  },
+  {
+   "url": "https://kitking.es/blog/grandes-grupos-restauracion-espana-2026-lista/",
+   "title": "Grandes grupos restauración España 2026: lista · Kitking",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.burbuja.info/inmobiliaria/temas/explota-la-burbuja-de-las-hamburguesas-goiko-multiplica-sus-perdidas-hasta-los-36-4-millones.2358935/",
+   "title": "Explota la burbuja de las hamburguesas. Goiko multiplica sus pérdidas hasta los 36,4 millones",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.cbinsights.com/company/restaurant-brands-iberia/financials",
+   "title": "www.cbinsights.com",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.cbinsights.com/company/restaurant-brands-iberia/alternatives-competitors",
+   "title": "alternatives competitors",
+   "kind": "searched"
+  },
+  {
+   "url": "https://es.statista.com/estadisticas/877285/ventas-globales-por-marca-de-restaurant-brands-international",
+   "title": "ventas globales por marca de restaurant brands international",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.cbinsights.com/company/hamburguesa-nostra/alternatives-competitors",
+   "title": "Founded Year",
+   "kind": "searched"
+  },
+  {
+   "url": "https://abrirfranquicias.es/pepco/",
+   "title": "Franquicia Pepco Precio [2026]: ¿Se Puede Franquiciar?",
+   "kind": "searched"
+  },
+  {
+   "url": "https://abrirfranquicias.es/normal/",
+   "title": "Franquicia Normal España [2026]: ¿Se Puede Abrir una Tienda?",
+   "kind": "searched"
+  },
+  {
+   "url": "https://uniamos.com/startups/vicio",
+   "title": "Vicio: qué hace, fundadores, inversores y financiación (2026)",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.franquiciashoy.es/actualidad/noticias/goiko-grill-busca-impulsar-su-marca-uniendose-a-l-catterton",
+   "title": "Goiko Grill busca impulsar su marca juntandose con L Catterton",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.cbinsights.com/company/caprabo",
+   "title": "Founded Year",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.diariodecuyo.com.ar/noticias/desembarca-una-franquicia-chilena-919156.html",
+   "title": "desembarca una franquicia chilena 919156",
+   "kind": "searched"
+  },
+  {
+   "url": "https://chamberly.substack.com/p/grandes-de-la-distribucion-en-europa",
+   "title": "Grandes de la Distribución en Europa: Tendencia hacia el Modelo de Franquicia, Más Flexible",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.cbinsights.com/investor/goiko-gril",
+   "title": "Founded Year",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.idealista.com/news/inmobiliario/retail/2025/04/21/841641-goiko-abre-su-primera-flagship-un-local-de-700-m2-en-plena-puerta-del-sol-de-madrid",
+   "title": "Goiko abre su primera 'flagship': un local de 700 m2 en plena Puerta del Sol (Madrid)",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.alimarket.es/restauracion/noticia/292614/goiko-grill-llega-a-dos-nuevas-localidades",
+   "title": "Goiko Grill llega a dos nuevas localidades - Noticias de Restauración en Alimarket",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.revistahosteleria.com/texto-diario/mostrar/4189616/goiko-corona-decimo-aniversario-nueva-apertura",
+   "title": "Goiko corona su décimo aniversario con una nueva apertura",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.marketingdirecto.com/creacion/goiko-abre-su-flagship-en-la-puerta-del-sol-un-hito-en-su-crecimiento",
+   "title": "GOIKO inaugura su restaurante más grande en la Puerta del Sol",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.elespanol.com/invertia/empresas/distribucion/20250503/goiko-prepara-dar-salto-lisboa-proximo-mes-julio-conseguir-abrir-flagship-puerta-sol/1003743736674_0.html",
+   "title": "Goiko se prepara para dar el salto a Lisboa el próximo mes de julio tras conseguir abrir su ‘flagship’ en la Puerta del Sol",
+   "kind": "searched"
+  },
+  {
+   "url": "https://ipmark.com/goiko-inaugura-su-nuevo-restaurante-en-la-puerta-del-sol-de-madrid/",
+   "title": "Goiko inaugura su nuevo restaurante en la Puerta del Sol, Madrid",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.timeout.es/madrid/es/noticias/goiko-abrira-su-restaurante-mas-grande-del-mundo-en-madrid-022323",
+   "title": "Goiko abrirá su restaurante más grande del mundo en Madrid",
+   "kind": "searched"
+  },
+  {
+   "url": "https://business-people.es/lifestyle/goiko-abre-su-restaurante-mas-grande-en-sol-y-mira-a-portugal/",
+   "title": "Goiko abre su restaurante más grande en Sol y mira a Portugal - Business People España",
+   "kind": "searched"
+  },
+  {
+   "url": "https://sivarious.com/operaciones/goiko-ubica-en-plena-puerta-del-sol-su-local-mas-grande-e-iconico-20250422-1654/",
+   "title": "Goiko ubica en plena Puerta del Sol su local más grande e icónico",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.covermanager.com/es/blog/como-calcular-umbral-rentabilidad-restaurante",
+   "title": "Cómo calcular el umbral de rentabilidad de tu restaurante",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.barcelonaculinaryhub.com/blog/gastos-restaurante",
+   "title": "Gastos de un restaurante: tipos, porcentajes y cómo controlarlos",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.jac-consulting.com/costes-hosteleria",
+   "title": "Costes en hostelería: cómo calcularlos y mejorar rentabilidad",
+   "kind": "searched"
+  },
+  {
+   "url": "https://leanfinance.es/blog/tabla-de-gastos-de-un-restaurante/",
+   "title": "Tabla de gastos de un restaurante: ¿cuáles son los costes en la hostelería?",
+   "kind": "searched"
+  },
+  {
+   "url": "https://jomesa.es/que-rentabilidad-da-un-bar/",
+   "title": "Rentabilidad de un bar en 2026: márgenes y costes reales",
+   "kind": "searched"
+  },
+  {
+   "url": "https://miselup.pro/blog/costes-de-un-restaurante-estructura-y-porcentajes/",
+   "title": "Costes de un restaurante: estructura y % (2026) — Miselup",
+   "kind": "searched"
+  },
+  {
+   "url": "https://costepro.top/blog/control-costes-hosteleria.html",
+   "title": "Control de Costes en Hostelería: Guía Completa 2026",
+   "kind": "searched"
+  },
+  {
+   "url": "https://pleko.app/rentabilidad-restaurante",
+   "title": "Rentabilidad de un Restaurante: Cuánto Se Gana y Cómo Mejorar los Márgenes [2026]",
+   "kind": "searched"
+  },
+  {
+   "url": "https://hosteltactil.com/blog/costes-de-un-restaurante/",
+   "title": "Costes de un restaurante",
+   "kind": "searched"
+  }
+ ],
+ "model": "claude-sonnet-5-5",
+ "searches": 6
+}

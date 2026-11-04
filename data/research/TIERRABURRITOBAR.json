@@ -1,0 +1,421 @@
+{
+ "summary": "## Tierra Burrito Bar: Madrid single-unit franchise review\n\n- **Can an individual franchise it in Spain?** Unclear. The official franchise page invites applications and states an initial investment of €400,000–€600,000. It gives no fee, royalty or sales data. In 2019 the company said its eleven locations were all company-owned and it had no plans to franchise. I found no franchised unit and no listing in Tormo, mundoFranquicia or Franquiciashoy. The company's LinkedIn page lists it as an \"Empresa propia\".\n- **Operator:** Tierra Brands España S.L., whose corporate purpose includes franchising in hospitality.\n- **Size:** more than 25 restaurants across Madrid, Barcelona and Salamanca.\n- **Premises:** Unclear. The investment covers fit-out of the premises, equipment and furniture, which suggests you would lease the unit yourself. Nothing confirms that, and no occupancy percentage is disclosed.\n- **Missing data:** I found no figures for sales per unit, entry fee, royalty or marketing fee. There is no FDD in Spain.\n- **Cost ratios:** These are generic Spanish restaurant benchmarks, not Tierra figures. Food cost is 28–32%, labour 30–40%, and rent 8–12%.\n- **Next step:** Ask the franchisor for the franchise disclosure document the Spanish rules require. It should cover the fee, royalty, site responsibility and unit-level sales.",
+ "data": {
+  "brand": "Tierra Burrito Bar",
+  "individual_franchise_available_spain": "unclear",
+  "eligibility_explanation": "Official site (tierraburritos.com/franquicia.php) solicits franchise applicants with a 400-600k EUR investment, but no franchisee, fee, royalty or contract terms are published. Company said in 2019 all units were owned and it preferred not to franchise; LinkedIn lists it as company-owned. No directory listing found. Not a known master franchise; appears company-run with a franchise program of unverified depth.",
+  "operator_in_spain": "Tierra Brands España S.L. (Madrid)",
+  "spain_store_count": {
+   "value": 25,
+   "year": 2026,
+   "source": "https://www.justretail.news/noticias/tierra-burrito-bar-abrira-un-restaurante-en-castellana-89-ampliando-su-presencia-en-madrid/ ('more than 25'; also tierraburritos.com)"
+  },
+  "franchise_fee_eur": {
+   "value": null,
+   "source": null,
+   "label": null
+  },
+  "min_floor_area_m2": {
+   "value": null,
+   "source": null
+  },
+  "rent_model": "unclear",
+  "rent_model_explanation": "Official page says investment covers fit-out of 'el local', implying franchisee-sourced premises, but it does not say who finds or leases the site. No occupancy-fee disclosure. Confirm in writing.",
+  "pnl_inputs": {
+   "auv_eur": {
+    "low": null,
+    "mode": null,
+    "high": null,
+    "source": null,
+    "label": null,
+    "note": "No unit sales published. Entity-level revenue (empresite, 1.5-3M EUR band for Tierra Brands España) is not per-unit."
+   },
+   "unit_m2": {
+    "low": null,
+    "mode": 264,
+    "high": null,
+    "source": "https://www.justretail.news/noticias/tierra-burrito-bar-abrira-un-restaurante-en-castellana-89-ampliando-su-presencia-en-madrid/",
+    "label": "verified",
+    "note": "Single data point: company's Castellana 89 unit, not a franchise standard."
+   },
+   "cogs_pct": {
+    "low": 25,
+    "mode": 30,
+    "high": 35,
+    "source": "https://www.covermanager.com/es/blog/como-calcular-umbral-rentabilidad-restaurante ; https://foodbox.es/blog/cuanto-cuesta-abrir-restaurante-espana",
+    "label": "third_party_estimate",
+    "note": "Generic Spanish restaurant benchmark, not Tierra-specific. Mode is my midpoint."
+   },
+   "labour_pct": {
+    "low": 30,
+    "mode": 34,
+    "high": 40,
+    "source": "https://www.covermanager.com/es/blog/como-calcular-umbral-rentabilidad-restaurante",
+    "label": "third_party_estimate",
+    "note": "Generic benchmark; mode is my judgement."
+   },
+   "royalty_pct": {
+    "low": null,
+    "mode": null,
+    "high": null,
+    "source": null,
+    "label": null,
+    "note": "Not disclosed. Net margin is overstated until a royalty is added."
+   },
+   "marketing_pct": {
+    "low": 2,
+    "mode": 3,
+    "high": 5,
+    "source": "https://horecazaragoza.com/gastos-anuales-de-un-restaurante/",
+    "label": "third_party_estimate",
+    "note": "Generic benchmark; any franchisor ad fund is unknown."
+   },
+   "other_opex_pct": {
+    "low": 23,
+    "mode": 27.5,
+    "high": 32,
+    "source": "https://www.covermanager.com/es/blog/como-calcular-umbral-rentabilidad-restaurante",
+    "label": "third_party_estimate",
+    "note": "Other operating costs (15-20%) plus market-lease rent (8-12%). Rent is bundled here because rent_model is not franchisor_property.",
+    "included_in": null
+   },
+   "investment_eur": {
+    "low": 400000,
+    "mode": 500000,
+    "high": 600000,
+    "source": "https://www.tierraburritos.com/franquicia.php",
+    "label": "verified",
+    "note": "Excludes working capital. Mode is the midpoint of the stated range, which I calculated."
+   },
+   "occupancy_pct": {
+    "low": 0,
+    "mode": 0,
+    "high": 0,
+    "source": null,
+    "label": null,
+    "note": "Not applicable. Rent is inside other_opex_pct.",
+    "included_in": "other_opex_pct"
+   }
+  },
+  "notes": [
+   "The 400-600k investment is from the franchisor's website, which publishes no detailed terms.",
+   "All cost ratios are third-party Spanish benchmarks, not Tierra figures.",
+   "Delivery was 20-30% of sales in 2019 (El Español); delivery commissions are not modelled.",
+   "Request the franchise disclosure document, a signed term sheet and unit sales data before committing."
+  ]
+ },
+ "citations": [
+  {
+   "url": "https://www.tierraburritos.com/franquicia.php",
+   "title": "Franquicia — Tierra Burrito Bar",
+   "kind": "cited"
+  },
+  {
+   "url": "https://www.elespanol.com/invertia/empresas/20190527/tierra-burrito-tex-mex-spain-utiliza-ternera-salamanca/400961067_0.html",
+   "title": "Tierra Burrito, el tex-mex 'made in Spain' que utiliza ternera de Salamanca",
+   "kind": "cited"
+  },
+  {
+   "url": "https://es.linkedin.com/company/tierrabrands",
+   "title": "Tierra",
+   "kind": "cited"
+  },
+  {
+   "url": "https://empresite.eleconomista.es/TIERRA-BRANDS-ESPANA.html",
+   "title": "Tierra Brands España Sl. - CIF y dirección",
+   "kind": "cited"
+  },
+  {
+   "url": "https://www.justretail.news/noticias/tierra-burrito-bar-abrira-un-restaurante-en-castellana-89-ampliando-su-presencia-en-madrid/",
+   "title": "Tierra Burrito Bar abrirá un restaurante en Castellana 89, ampliando su presencia en Madrid - Noticias y Actualidad Retail",
+   "kind": "cited"
+  },
+  {
+   "url": "https://www.covermanager.com/es/blog/como-calcular-umbral-rentabilidad-restaurante",
+   "title": "Cómo calcular el umbral de rentabilidad de tu restaurante",
+   "kind": "cited"
+  },
+  {
+   "url": "https://www.tripadvisor.es/ShowUserReviews-g187514-d3748744-r485564643-Tierra_Burrito_Bar-Madrid.html",
+   "title": "Franquicia mexicana muy recomendable. - Opiniones de viajeros sobre Tierra Burrito Bar, Madrid - Tripadvisor",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.tripadvisor.com/Restaurant_Review-g187514-d10468160-Reviews-Tierra_Burrito_Sagasta-Madrid.html",
+   "title": "TIERRA BURRITO SAGASTA, Madrid - Centro - Photos & Restaurant Reviews - Order Online Food Delivery - Tripadvisor",
+   "kind": "searched"
+  },
+  {
+   "url": "https://conectacuenca.cl/noticias/tierra-burrito-bar-franquicia/",
+   "title": "Franquicia Tierra Burrito Bar: ¡Una Oportunidad de Negocio Deliciosa!",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.tierraburritos.com/",
+   "title": "Tierra Burrito Bar — Burritos, Tacos y Nachos en España",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.tierraburritos.com/restaurantes/",
+   "title": "Nuestros Restaurantes — Tierra Burrito Bar",
+   "kind": "searched"
+  },
+  {
+   "url": "https://emprendedorinvicto.com/franquicia-tierra-burrito/",
+   "title": "▷ Franquicia tierra burrito",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.mobequipa.com/tierra-burrito/",
+   "title": "TIERRA BURRITO",
+   "kind": "searched"
+  },
+  {
+   "url": "https://mutatio.es/publicaciones/tierra-burrito-bar-franquicia-5020/",
+   "title": "Franquicia Tierra Burrito Bar: Oportunidad de Negocio",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.franquiciashoy.es/franquicias/franquicias-de-hosteleria-y-restauracion/mexicanos/burritos",
+   "title": "Franquicia Burritos - Franquicia de Mexicanos",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.mundofranquicia.com/franquicia/restauracion/burrito-azteca/",
+   "title": "Franquicia Burrito Azteca",
+   "kind": "searched"
+  },
+  {
+   "url": "https://tormofranquicias.es/burritos/",
+   "title": "Burritos - Franquicias de Éxito",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.100franquicias.com.mx/franquicias/restaurantes-cafeterias/burro-t/Franquicia-burro-t-negocio.htm",
+   "title": "Franquicias. Franquicia Burro-T.",
+   "kind": "searched"
+  },
+  {
+   "url": "https://franchiseoverview.com/company/barrio-burrito-bar",
+   "title": "Barrio Burrito Bar Franchise — FDD, Fees & Cost (2026)",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.entrepreneur.com/franchises/directory/barrio-burrito-bar/335226789",
+   "title": "Start a Barrio Burrito Bar Franchise in 2026 - Entrepreneur",
+   "kind": "searched"
+  },
+  {
+   "url": "https://app.atlasfran.com/franchisedetails.asp?FranID=3611",
+   "title": "Barrio Burrito Bar Franchise Details",
+   "kind": "searched"
+  },
+  {
+   "url": "https://frandera.com/franchise/burrito-bar",
+   "title": "Barrio Burrito Bar Franchise ($129K-$1.1M)",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.alimarket.es/restauracion/noticia/394235/tierra-burrito-aumenta-su-presencia-en-centros-comerciales",
+   "title": "Tierra Burrito aumenta su presencia en centros comerciales - Noticias de Restauración en Alimarket",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.alimarket.es/restauracion/noticia/327043/tierra-burrito-realiza-su-primera-apertura-fuera-de-la-comunidad-de-madrid",
+   "title": "Tierra Burrito realiza su primera apertura fuera de la Comunidad de Madrid",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.alimarket.es/restauracion/noticia/385525/tierra-burrito-contempla-entre-tres-y-cinco-aperturas-para-2024",
+   "title": "Tierra Burrito contempla entre tres y cinco aperturas para 2024",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.alimarket.es/restauracion/noticia_amp/407853/tierra-burrito-crece-en-barcelona",
+   "title": "Tierra Burrito crece en Barcelona - Noticias de Restauración en Alimarket",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.haztuplan.com/tierra-burrito-bar/",
+   "title": "Tierra Burrito Bar, comida mexicana en Madrid",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.yahoo.com/lifestyle/articles/coming-burrito-chain-youll-see-170300526.html",
+   "title": "The Up-And-Coming Burrito Chain You'll See Everywhere In 2026",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.diariosigloxxi.com/texto-diario/mostrar/6071571/tormo-franquicias-reglas-franquicia-cambiado",
+   "title": "Tormo Franquicias: las reglas de la franquicia han cambiado",
+   "kind": "searched"
+  },
+  {
+   "url": "https://x.com/tormofranchise",
+   "title": "Tormo Franquicias (@tormofranchise) / X",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.franquiciashoy.es/actualidad/noticias/tormo-franquicias-hace-un-adelanto-de-las-tendencias-y-perspectivas-economicas-de-la-franquicia-en-2025",
+   "title": "Tormo Franquicias hace un adelanto de las tendencias y perspectivas económicas de la franquicia en 2025",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.diariocritico.com/noticia/488294/empresas/tormo-franchise-y-franquiciashoy-publican-un-especial-restauracion.html",
+   "title": "Tormo Franchise y Franquiciashoy publican un especial Restauración",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.franquiciashoy.es/consultora-de-franquicias",
+   "title": "Franquicias Hoy - Consultora de franquicias",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.elconfidencialdigital.com/articulo/comunicados/tormo-franquicias-reglas-franquicia-han-cambiado/202610291837201498086.html",
+   "title": "Tormo Franquicias: las reglas de la franquicia han cambiado",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.conector.com/mentores/business-plan-2/eduardo-tormo/",
+   "title": "Eduardo Tormo - Conector",
+   "kind": "searched"
+  },
+  {
+   "url": "https://asest.es/story/tormo-franquicias-consulting/",
+   "title": "Descubre Tormo Franquicias Consulting: La Consultora Líder en Franquicias en España que Revoluciona el Mercado - Asest",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.franquiciashoy.es/como-ayudarte",
+   "title": "Franquicias Hoy - Como ayudarte",
+   "kind": "searched"
+  },
+  {
+   "url": "https://barritaburrito.co/franquicias/",
+   "title": "Franquicias",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.urbanburritobar.com/franquiciate/",
+   "title": "franquiciate",
+   "kind": "searched"
+  },
+  {
+   "url": "https://en.wikipedia.org/wiki/Cha_Cha_Cha_(restaurant)",
+   "title": "Cha Cha Cha (restaurant)",
+   "kind": "searched"
+  },
+  {
+   "url": "https://franzy.com/franchises/burrito-bar-master-franchise",
+   "title": "Burrito Bar - Master Franchise Franchise Analysis: Cost, FDD & More",
+   "kind": "searched"
+  },
+  {
+   "url": "https://restauracionnews.com/2023/09/tierra-entrevista-mar-bastarrica-rrhh/",
+   "title": "Entrevista a Mar Bastarrica, responsable de RR.HH de Tierra Burrito Bar",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.alimarket.es/restauracion/empresa/10033714/tierra-burrito-bar---tierra-brands-espana--s-l-",
+   "title": "TIERRA BRANDS ESPAÑA, S.L. - Empresas de Restauración en Alimarket, información económica sectorial",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.toppingsandsalads.es/restaurante-tex-mex/tierra-burrito-bar-5/",
+   "title": "Tierra Burrito Bar",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.tripadvisor.com/Restaurant_Review-g187514-d10810034-Reviews-Tierra_Burrito_Espoz_Y_Mina-Madrid.html",
+   "title": "TIERRA BURRITO ESPOZ Y MINA, Madrid - Calle Espoz y Mina 8, Centro - Restaurant Reviews & Phone Number - Tripadvisor",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.tripadvisor.com/Restaurant_Review-g187514-d3748744-Reviews-Tierra_Burrito_Guzman_El_Bueno-Madrid.html",
+   "title": "TIERRA BURRITO GUZMAN EL BUENO, Madrid - Gaztambide - Photos & Restaurant Reviews - Order Online Food Delivery - Tripadvisor",
+   "kind": "searched"
+  },
+  {
+   "url": "https://restaurantguru.com/Tierra-Madrid-4",
+   "title": "Tierra Burrito Bar, Madrid, Sol - Restaurant menu, prices and reviews",
+   "kind": "searched"
+  },
+  {
+   "url": "https://en.wikipedia.org/wiki/Tierra_del_Sol_(restaurant)",
+   "title": "Tierra del Sol (restaurant)",
+   "kind": "searched"
+  },
+  {
+   "url": "https://blogstartinceu.wordpress.com/2014/03/03/tierra-burrito-bar/",
+   "title": "TIERRA BURRITO BAR |",
+   "kind": "searched"
+  },
+  {
+   "url": "https://ranking-empresas.eleconomista.es/TIERRA-BURRITO-CUATRO-CAMINOS.html",
+   "title": "Información Ranking de Tierra Burrito Cuatro Caminos sl.",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.alimarket.es/restauracion/empresa/10025729/tierra-burrito-bar---frontera-sistemas-de-espana--s-l-",
+   "title": "TIERRA BURRITO BAR - FRONTERA SISTEMAS DE ESPAÑA, S.L. - Empresas de Restauración en Alimarket, información económica sectorial",
+   "kind": "searched"
+  },
+  {
+   "url": "https://leadiq.com/c/tierra/5a1d9a7e2300005a00899db0",
+   "title": "Tierra Company Overview, Contact Details & Competitors",
+   "kind": "searched"
+  },
+  {
+   "url": "https://tracxn.com/d/companies/tierra-burritos/__jWG67QlMEDmkE_jaTx0mb1Y98np18g13MMuURsU38gw",
+   "title": "Tierra Burritos - 2025 Company Profile & Competitors - Tracxn",
+   "kind": "searched"
+  },
+  {
+   "url": "https://modelosdeplandenegocios.com/blogs/news/analisis-mercado-comida-mexicana-espana",
+   "title": "Análisis del mercado de comida mexicana en España (2025)",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.barcelonaculinaryhub.com/blog/gastos-restaurante",
+   "title": "Gastos de un restaurante: tipos, porcentajes y cómo controlarlos",
+   "kind": "searched"
+  },
+  {
+   "url": "https://miselup.pro/blog/costes-de-un-restaurante-estructura-y-porcentajes/",
+   "title": "Costes de un restaurante: estructura y % (2026) — Miselup",
+   "kind": "searched"
+  },
+  {
+   "url": "https://jomesa.es/que-rentabilidad-da-un-bar/",
+   "title": "Rentabilidad de un bar en 2026: márgenes y costes reales",
+   "kind": "searched"
+  },
+  {
+   "url": "https://pleko.app/rentabilidad-restaurante",
+   "title": "Rentabilidad de un Restaurante: Cuánto Se Gana y Cómo Mejorar los Márgenes [2026]",
+   "kind": "searched"
+  },
+  {
+   "url": "https://www.gastronomiarentable.com/post/estructura-de-costos-para-un-restaurante",
+   "title": "Estructura de costos para un restaurante",
+   "kind": "searched"
+  },
+  {
+   "url": "https://foodbox.es/blog/cuanto-cuesta-abrir-restaurante-espana",
+   "title": "Cuánto cuesta abrir un restaurante en España: inversión, gastos y rentabilidad",
+   "kind": "searched"
+  },
+  {
+   "url": "https://horecazaragoza.com/gastos-anuales-de-un-restaurante/",
+   "title": "¿Cuáles son los gastos anuales de un restaurante?: Guía completa",
+   "kind": "searched"
+  },
+  {
+   "url": "https://hosteltactil.com/blog/costes-de-un-restaurante/",
+   "title": "Costes de un restaurante",
+   "kind": "searched"
+  }
+ ],
+ "model": "claude-sonnet-5-5",
+ "searches": 8
+}

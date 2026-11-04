@@ -32,6 +32,19 @@
 - [x] Python-generated audit trail ("How we got here"), evidence pack (`mfi/report.py`)
 - [ ] First live run with API key + Apify token → tighten Idealista field parsing on real response
 
+## Done — Layers 1a, 2, 4 + money-first ranking (2026-11-04)
+
+- [x] Brand registry: 1,353 Madrid chains, sector, franchisability (`mfi/brands.py`) · Brand directory page
+- [x] Store inventory: census + OpenStreetMap merge, offices/warehouses/airport excluded (`mfi/stores.py`)
+- [x] Competitors = activity class + known chains in it (fixes Dia / 'Mi Alcampo'); reliability gate on AUC
+- [x] Layer 2 demand (`mfi/demand.py`): consumer + office premises, industry excluded, calibrated on 31 pedestrian
+      counters — rank correlation 0.71 (held-out 0.62) vs 0.29 residents-only, 0.53 old proxy; metro/rail, offices features
+- [x] Layer 4 listings (`mfi/listings.py`): 2,127 clean Idealista units (8 Apify pulls, 2,501 unique raw)
+- [x] Money-first ranking (`mfi/model/rank.py`, `mfi/pipeline.py`): research → filter → score → P&L MC per listing →
+      greedy rank by P(payback ≤ target) with cannibalisation; one click in the app
+- [x] Claude research cached per brand (`data/research/`): Telepizza (full economics), Tierra Burrito Bar (eligibility unclear),
+      Goiko (not franchised)
+
 ## Next — model v0.3 (in this order)
 
 1. **OSM + Google Maps store cross-check** — the census misses stores registered under company names (McDonald's shows

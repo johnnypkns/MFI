@@ -1,0 +1,12 @@
+{
+ "lambda_m": 250,
+ "a_consumer": 320.0,
+ "b_office": 320.0,
+ "c_station": 0.0,
+ "spearman_in_sample": 0.708539170855556,
+ "spearman_leave_one_out": 0.6242564806399549,
+ "n_sensors": 31,
+ "baseline_residents_only": 0.29236818376225276,
+ "baseline_v0_all_premises": 0.5343280599792896,
+ "sensor_period": "2022-2024 weekday means, Ayuntamiento de Madrid permanent counters (dataset 300321)"
+}
