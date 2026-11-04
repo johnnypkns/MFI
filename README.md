@@ -1,4 +1,6 @@
-# Madrid Franchise Intelligence
+# Seize — Site Selection Engine
+
+*(Code package: `mfi`.)*
 
 Decision support for one question: *given a franchise, where in Madrid should I open to maximise risk-adjusted return on invested capital?*
 

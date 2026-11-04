@@ -1,4 +1,4 @@
-"""Madrid Franchise Intelligence — dashboard (3 pages: Analysis · Investment report · Methodology).
+"""Seize — Site Selection Engine. Dashboard (3 pages: Analysis · Investment report · Methodology).
 
     streamlit run app.py
 
@@ -20,7 +20,7 @@ from mfi.model.robustness import simulate as robustness
 from mfi.model.site_model import FEATURE_LABELS, FEATURES, PARAMS, load_data, run
 from mfi.stores import inventory, load_osm, missing_from_census
 
-st.set_page_config(page_title="Madrid Franchise Intelligence", page_icon="📍", layout="wide")
+st.set_page_config(page_title="Seize · Site Selection Engine", page_icon="🔴", layout="wide")
 RED, BLACK, GREY = [220, 38, 38], [17, 17, 17], [150, 150, 150]
 QUICK = ["McDonald's", "Burger King", "Starbucks", "Five Guys", "Goiko", "KFC", "Taco Bell", "Oakberry"]
 SS = st.session_state
@@ -28,7 +28,9 @@ SS = st.session_state
 st.markdown("""
 <style>
 .block-container {padding-top: 3rem; max-width: 1500px;}
-.hero h1 {font-size: 2.0rem; letter-spacing: .04em; margin: 0; font-weight: 800;}
+.hero h1 {font-size: 2.2rem; letter-spacing: .22em; margin: 0; font-weight: 800; display:flex; align-items:center; gap:18px;}
+.hero h1 .tag {font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size:.72rem; letter-spacing:.38em; color:#dc2626;
+  font-weight:500; border:1px solid #dc2626; padding:4px 10px 4px 13px;}
 .hero p {color: #6b7280; margin: .2rem 0 1rem 0;}
 .legend span {display:inline-flex; align-items:center; margin-right:18px; font-size:.9rem; color:#374151;}
 .dot {width:12px; height:12px; border-radius:50%; display:inline-block; margin-right:6px;}
@@ -83,7 +85,7 @@ div[data-testid="stTextInput"] div[data-baseweb="base-input"] {border:none !impo
 div[data-testid="stTextInput"] {max-width: 380px; margin: 0 auto;}
 div[data-testid="stTextInputRootElement"], div[data-testid="stTextInputRootElement"] * {background:transparent !important; border-color:transparent !important;}
 div[data-testid="stTextInputRootElement"] {border-bottom:2px solid #dc2626 !important; border-radius:0 !important;}
-p.gate-h {font-size:2.1rem !important; line-height:1.2 !important; margin-bottom:4px !important;}
+p.gate-h {font-size:3.4rem !important; letter-spacing:.28em !important; padding-left:.28em; line-height:1.2 !important; margin-bottom:4px !important;}
 p.gate-title {font-size:.74rem !important;} p.gate-sub, p.gate-foot {font-size:.7rem !important;}
 div[data-testid="stFormSubmitButton"] {max-width: 380px; margin: 8px auto 0 auto;}
 div[data-testid="stFormSubmitButton"] button, .stButton button {width:100%; border-radius:0; background:#dc2626; color:#fff; border:none; letter-spacing:.4em; font-family: ui-monospace, Menlo, monospace;
@@ -93,8 +95,8 @@ div[data-testid="stFormSubmitButton"] button p {letter-spacing:.4em; font-size:.
 .gate-foot {text-align:center; color:#d1d5db; font-family: ui-monospace, Menlo, monospace; font-size:.65rem; letter-spacing:.3em; margin-top:46px;}
 </style>
 <div class="gate-mark"></div>
-<p class="gate-title">MFI · RESTRICTED</p>
-<p class="gate-h">MADRID FRANCHISE<br>INTELLIGENCE</p>
+<p class="gate-title">RESTRICTED ACCESS</p>
+<p class="gate-h">SEIZE</p>
 <p class="gate-sub">SITE SELECTION ENGINE</p>
 <div class="gate-line"></div>
 """, unsafe_allow_html=True)
@@ -117,7 +119,7 @@ div[data-testid="stFormSubmitButton"] button p {letter-spacing:.4em; font-size:.
         if SS["fails"] >= 5:
             SS["lock_until"], SS["fails"] = time.time() + 60, 0
         st.markdown('<p class="gate-sub" style="color:#dc2626">ACCESS DENIED</p>', unsafe_allow_html=True)
-    st.markdown('<p class="gate-foot">© MFI · MADRID</p>', unsafe_allow_html=True)
+    st.markdown('<p class="gate-foot">© SEIZE · MADRID</p>', unsafe_allow_html=True)
     st.stop()
 
 
@@ -125,7 +127,8 @@ gate()
 
 
 def hero(sub):
-    st.markdown(f'<div class="hero"><h1>MADRID FRANCHISE INTELLIGENCE</h1><p>{sub}</p></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="hero"><h1>SEIZE<span class="tag">SITE SELECTION ENGINE</span></h1><p>{sub}</p></div>',
+                unsafe_allow_html=True)
 
 
 # ------------------------------------------------------------------ cached compute

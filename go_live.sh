@@ -1,5 +1,5 @@
 #!/bin/bash
-# Madrid Franchise Intelligence — go live from this Mac.
+# Seize — Site Selection Engine — go live from this Mac.
 #   ./go_live.sh
 # Starts the dashboard, opens a free Cloudflare Tunnel, prints a public https link you can send to anyone.
 # The link works while this window is open and the Mac is awake. Ctrl+C stops everything.
