@@ -17,7 +17,7 @@ from mfi import pipeline, quota, reasoning, report, scrape
 from mfi.model import pnl
 from mfi.model.export import APP
 from mfi.model.robustness import simulate as robustness
-from mfi.model.site_model import FEATURE_LABELS, FEATURES, PARAMS, load_data, run
+from mfi.model.site_model import FEATURE_LABELS, FEATURES, PARAMS, demand_cal, load_data, run
 from mfi.stores import inventory, load_osm, missing_from_census
 
 st.set_page_config(page_title="Seize · Site Selection Engine", page_icon="🔴", layout="wide")
@@ -132,8 +132,11 @@ def hero(sub):
 
 
 # ------------------------------------------------------------------ cached compute
+DATA_VERSION = "2026-11-05a"   # bump when the data model changes: forces a fresh load after a redeploy
+
+
 @st.cache_resource(show_spinner="Loading Madrid data…")
-def data():
+def data(version=DATA_VERSION):
     return load_data()
 
 
@@ -358,7 +361,7 @@ def page_analysis():
                 f"{m['competitors']:,} competitors")
         b.write(f"Brand demand decay {m['demand_decay_m']} m · daytime-activity weight {m['demand_activity_weight']:.0f}")
     with t3:
-        cal = data().demand_cal or {}
+        cal = demand_cal(data()) or {}
         st.markdown(f"Footfall is calibrated on the city's **{cal.get('n_sensors', '?')} permanent pedestrian counters** "
                     f"({cal.get('sensor_period', '')}).")
         cc = pd.DataFrame({"Demand measure": ["Residents only", "v0: residents + every premises", "Now: consumer + office premises, industry excluded"],
@@ -472,7 +475,7 @@ def page_directory():
 def page_methodology():
     hero("Exactly what runs behind every number: data, scraping, models, simulations, formulas and their limits.")
     D = data()
-    cal = D.demand_cal or {}
+    cal = demand_cal(D) or {}
     from mfi.model.rank import CAP_QUANTILE, MODEL_ERROR_SIGMA, RENT_OUTLIER
 
     st.markdown("## 1 · Pipeline (one click)")

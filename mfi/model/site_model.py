@@ -67,13 +67,32 @@ class Data:
     _surface: object = None
 
     def surface(self):
-        """Layer 2 demand surface (built once)."""
-        if self._surface is None:
-            from ..demand import DemandSurface, TO_UTM
-            g = self.generators.copy()
-            g["x"], g["y"] = TO_UTM.transform(g["lon"].values, g["lat"].values)
-            self._surface = DemandSurface(self.premises, self.sections, g)
-        return self._surface
+        return get_surface(self)
+
+
+_SURFACES = {}
+
+
+def get_surface(data):
+    """Layer 2 demand surface, built once per Data object. A module-level cache instead of a method so that a
+    Data object cached by an older app version (Streamlit keeps cache_resource across redeploys) still works."""
+    key = id(data)
+    if key not in _SURFACES:
+        from ..demand import DemandSurface, TO_UTM
+        gen = getattr(data, "generators", None)
+        if gen is None:
+            gen = pd.read_parquet(APP / "generators.parquet")
+        g = gen.copy()
+        g["x"], g["y"] = TO_UTM.transform(g["lon"].values, g["lat"].values)
+        _SURFACES[key] = DemandSurface(data.premises, data.sections, g)
+    return _SURFACES[key]
+
+
+def demand_cal(data):
+    cal = getattr(data, "demand_cal", None)
+    if cal is None and (APP / "demand.json").exists():
+        cal = json.loads((APP / "demand.json").read_text())
+    return cal
 
 
 def load_data(app_dir=APP) -> Data:
@@ -189,8 +208,8 @@ class FeatureSpace:
         self.sec_inc = s["net_income_per_person"].fillna(s["net_income_per_person"].median()).values
         self.sec_tree = cKDTree(self.sec_xy)
         op = p[is_open(p)]
-        self.surf = data.surface()
-        self.cal = data.demand_cal
+        self.surf = get_surface(data)
+        self.cal = demand_cal(data)
         # daytime activity per section = consumer-facing + office premises (industrial/wholesale excluded: Layer 2)
         sd = self.surf.sec.set_index("section_code")
         self.sec_activity = s["section_code"].map(sd["consumer"] + sd["office"]).fillna(0).values.astype(float)
@@ -368,7 +387,7 @@ def run(data: Data, query: str, n_sites=5, P=PARAMS, extra_stores: pd.DataFrame 
     # ---- candidates: vacant street-level units ('Cerrado' = registered but not trading)
     cand = prem[(prem["status"] == "Cerrado") & prem["access_type"].isin(["Puerta Calle", "Agrupado"])
                 & (prem["geom_source"] == "local") & ~prem["barrio_code"].isin(SPECIAL_VENUE_BARRIOS)].copy()
-    ind = data.surface().industrial_share(cand[["x", "y"]].values, 200)
+    ind = get_surface(data).industrial_share(cand[["x", "y"]].values, 200)
     cand = cand[ind <= INDUSTRIAL_SHARE_MAX].copy()
     cfeat = fs.compute(cand[["x", "y"]].values)
     cand["suitability"] = model.predict_proba(transform(cfeat))[:, 1]

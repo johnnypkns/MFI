@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 
-from .site_model import INDUSTRIAL_SHARE_MAX, transform
+from .site_model import INDUSTRIAL_SHARE_MAX, get_surface, transform
 
 MODEL_ERROR_SIGMA = 0.20      # lognormal noise on revenue: model error around the demand estimate (assumption, shown)
 RENT_OUTLIER = (0.35, 3.0)    # listing €/m² vs the median of comparable listings within 1 km
@@ -28,7 +28,7 @@ def candidates(data, R, listings, m2_range=(60, 600), floors=("ground", "mezzani
     df = listings[listings["m2"].between(*m2_range) & listings["floor"].isin(floors)].copy()
     log = {"listings": len(listings), "size_and_floor": len(df)}
     xy = df[["x", "y"]].values
-    df = df[data.surface().industrial_share(xy, 200) <= INDUSTRIAL_SHARE_MAX]
+    df = df[get_surface(data).industrial_share(xy, 200) <= INDUSTRIAL_SHARE_MAX]
     log["not_industrial"] = len(df)
     # local-market sanity: compare €/m² with comparable listings (same size band) within 1 km
     allx = listings[["x", "y"]].values
