@@ -5,6 +5,7 @@ import re
 import pandas as pd
 
 from .model.export import APP, ROOT, norm_name
+from .model.evaluate import closure_model
 from .model.rank import rank
 from .model.site_model import run
 from .stores import inventory, load_osm, missing_from_census
@@ -54,7 +55,7 @@ def econ_from_profile(profile, overrides=None):
 
 
 def analyse(data, brand, n=5, listings=None, profile=None, m2_range=None, floors=("ground", "mezzanine", "unknown"),
-            payback_target=4.0, overrides=None, osm=None):
+            payback_target=4.0, overrides=None, osm=None, eval_params=None):
     reg = pd.read_parquet(APP / "brands.parquet")
     row = reg[reg["brand"] == brand]
     extra = None
@@ -65,6 +66,9 @@ def analyse(data, brand, n=5, listings=None, profile=None, m2_range=None, floors
     econ, missing, rent_model, m2_suggest = econ_from_profile(profile, overrides)
     m2_range = m2_range or m2_suggest or DEFAULT_M2
     listings = listings if listings is not None else pd.read_parquet(APP / "listings.parquet")
-    ranked = rank(data, R, listings, econ=econ, n=n, m2_range=m2_range, floors=floors, payback_target=payback_target)
-    return {"R": R, "ranked": ranked, "econ": econ, "missing": missing, "rent_model": rent_model,
+    food = (R.category or "").startswith("56")
+    closure = closure_model(data, R, pd.read_parquet(APP / "brand_members.parquet"))
+    ranked = rank(data, R, listings, econ=econ, n=n, m2_range=m2_range, floors=floors, payback_target=payback_target,
+                  eval_params=eval_params, food=food, closure=closure)
+    return {"closure": closure, "food": food, "R": R, "ranked": ranked, "econ": econ, "missing": missing, "rent_model": rent_model,
             "m2_range": m2_range, "profile": profile}

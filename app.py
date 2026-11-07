@@ -15,6 +15,7 @@ import pydeck as pdk
 import streamlit as st
 
 from mfi import confidence, pipeline, quota, reasoning, report
+from mfi.model import evaluate as EV
 from mfi.model.export import APP, norm_name
 from mfi.model.rank import CAP_QUANTILE, MODEL_ERROR_SIGMA, RENT_OUTLIER, _pnl, rank
 from mfi.model.site_model import FEATURE_LABELS, FEATURES, PARAMS, demand_cal, load_data, run, transform
@@ -23,7 +24,7 @@ from mfi.stores import inventory, load_osm, missing_from_census
 st.set_page_config(page_title="Seize · Site Selection Engine", page_icon="🔴", layout="wide", initial_sidebar_state="collapsed")
 RED, WHITE, GREY = [239, 35, 60], [245, 245, 247], [120, 120, 130]
 SS = st.session_state
-DATA_VERSION = "2026-11-05b"   # bump when the data model changes: forces a fresh load after a redeploy
+DATA_VERSION = "2026-11-07a"   # bump when the data model changes: forces a fresh load after a redeploy
 
 st.markdown("""
 <style>
@@ -57,6 +58,11 @@ st.markdown("""
 .legend span {display:inline-flex; align-items:center; margin-right:18px; font-size:.85rem; color:var(--mute);}
 .dot {width:11px; height:11px; border-radius:50%; display:inline-block; margin-right:6px;}
 .step {border-left: 3px solid var(--red); padding: .4rem .8rem; margin: .35rem 0; background: var(--card);}
+.badge.ok {border-color:#16a34a; color:#4ade80;} .badge.cond {border-color:#ca8a04; color:#facc15;} .badge.rej {border-color:var(--red); color:#fb7185;}
+.stg {display:flex; gap:12px; padding:.42rem .2rem; border-bottom:1px solid var(--line); font-size:.88rem;}
+.stg .n {font-family: ui-monospace, Menlo, monospace; color:var(--mute); flex:0 0 28px;}
+.stg .nm {flex:0 0 170px; color:var(--txt); font-weight:600;} .stg .d {color:var(--mute);}
+.stg .s {flex:0 0 22px; font-weight:800;} .s.pass {color:#4ade80;} .s.flag {color:#facc15;} .s.fail {color:#fb7185;} .s.info {color:var(--mute);}
 .part {display:flex; align-items:center; gap:10px; margin:.35rem 0;}
 .part .bar {flex:0 0 160px; height:6px; background:var(--line);} .part .bar i {display:block; height:6px; background:var(--red);}
 div[data-testid="stMetricValue"] {font-size: 1.55rem; font-family: ui-monospace, Menlo, monospace;}
@@ -198,9 +204,17 @@ def model_for(brand, version=DATA_VERSION):
 
 
 @st.cache_resource(show_spinner=False)
-def ranked_for(brand, n, m2_range, floors, payback, econ_json, version=DATA_VERSION):
+def closure_for(brand, version=DATA_VERSION):
+    return EV.closure_model(data(), model_for(brand), pd.read_parquet(APP / "brand_members.parquet"))
+
+
+@st.cache_resource(show_spinner=False)
+def ranked_for(brand, n, m2_range, floors, payback, econ_json, eval_json="", version=DATA_VERSION):
     econ = {k: tuple(v) for k, v in json.loads(econ_json).items()} if econ_json else None
-    return rank(data(), model_for(brand), listings(), econ=econ, n=n, m2_range=m2_range, floors=floors, payback_target=payback)
+    R = model_for(brand)
+    return rank(data(), R, listings(), econ=econ, n=n, m2_range=m2_range, floors=floors, payback_target=payback,
+                eval_params=json.loads(eval_json) if eval_json else None, food=(R.category or "").startswith("56"),
+                closure=closure_for(brand))
 
 
 def brand_status(row, research):
@@ -242,7 +256,8 @@ def settings_for(brand):
         if m2_suggest else "default — no franchisor figure found yet")
     return {"profile": prof, "m2_range": tuple(int(v) for v in m2), "m2_source": m2_source,
             "floors": tuple(user.get("floors") or ("ground", "mezzanine", "unknown")),
-            "payback": float(user.get("payback") or 4.0), "overrides": user.get("econ") or {}, "rent_model": rent_model}
+            "payback": float(user.get("payback") or 4.0), "overrides": user.get("econ") or {}, "rent_model": rent_model,
+            "eval": user.get("eval") or {}}
 
 
 def safe_research(brand):
@@ -289,10 +304,14 @@ def analyse(brand, n, allow_research=True):
         econ, missing, rent_model, _ = pipeline.econ_from_profile(prof, cfg["overrides"])
         st.write(f"⧗ **Screening {len(listings()):,} units for rent** and simulating each one's P&L…")
         K = ranked_for(brand, n, cfg["m2_range"], cfg["floors"], cfg["payback"],
-                       json.dumps({k: list(v) for k, v in econ.items()}) if econ else "")
+                       json.dumps({k: list(v) for k, v in econ.items()}) if econ else "",
+                       json.dumps(cfg["eval"], sort_keys=True) if cfg["eval"] else "")
         if K.get("ok"):
             st.write(f"✓ **Screened** — {K['log']['listings']:,} units → {K['log']['pass_suitability_gate']:,} qualify "
                      f"({cfg['m2_range'][0]}–{cfg['m2_range'][1]} m², {', '.join(cfg['floors'])})")
+            dd = K.get("decisions", {})
+            st.write(f"✓ **10-stage evaluation** — {K['pool']} best units checked like a franchisor's site committee: "
+                     f"{dd.get('APPROVE', 0)} approve · {dd.get('CONDITIONAL', 0)} conditional · {dd.get('REJECT', 0)} reject")
             st.write("✓ **Ranked** — " + K["metric"] + " · cannibalisation re-scored after every pick")
             conf = confidence.score_units(R, K["sites"], prof, econ, cfg["overrides"])
             st.write("✓ **Confidence scored** — model · verified inputs · demand stability · listing quality")
@@ -386,11 +405,17 @@ def page_analyse():
                 grid = []
             grid += [("Demand vs typical store", f"{s['demand_ratio']:.2f}×"), ("Traspaso", eur(s["traspaso_eur"]) if s["traspaso_eur"] else "none"),
                      (f"Nearest {brand}", f"{s['dist_nearest_brand_m']:,.0f} m")]
+            grid += [("Forecast vs typical store", f"{s['f_blend']:.2f}× (Huff {s['f_huff']:.2f} · analog {s['f_analog']:.2f} · regr. {s['f_regression']:.2f})"),
+                     ("Takes from own stores", f"up to {s['transfer_max']:.0%}")]
             cells = "".join(f"<div>{a}<b>{b}</b></div>" for a, b in grid)
+            dec = s.get("decision", "")
+            dbadge = f'<span class="badge {dict(APPROVE="ok", CONDITIONAL="cond", REJECT="rej").get(dec, "")}">{dec}</span>' if dec else ""
+            reason = (f'<div class="sub">⚑ {s["reasons"][0].split(": ", 1)[-1]}' + (f' · +{len(s["reasons"]) - 1} more' if len(s["reasons"]) > 1 else "")
+                      + "</div>") if dec != "APPROVE" and isinstance(s.get("reasons"), list) and s["reasons"] else ""
             st.markdown(f"""<div class="card"><div class="top"><div><span class="rk">#{int(s['rank'])}</span>
 <span class="addr">{s['address']}</span></div><div class="kpi">{kpi}</div></div>
-<div class="sub">{s['m2']:.0f} m² · {eur(s['rent_month'])}/month · {s['eur_m2']:.1f} €/m² {conf_badge(c['confidence'])}</div>
-<div class="more"><div class="grid">{cells}</div></div></div>""", unsafe_allow_html=True)
+<div class="sub">{s['m2']:.0f} m² · {eur(s['rent_month'])}/month · {s['eur_m2']:.1f} €/m² {dbadge}{conf_badge(c['confidence'])}</div>
+{reason}<div class="more"><div class="grid">{cells}</div></div></div>""", unsafe_allow_html=True)
             if st.button(f"OPEN UNIT #{int(s['rank'])} →", key=f"open{int(s['rank'])}"):
                 SS["unit_rank"] = int(s["rank"])
                 st.switch_page(PAGES["unit"])
@@ -403,7 +428,21 @@ def page_analyse():
         st.markdown('<div class="legend">' + "".join(legend) + "</div>", unsafe_allow_html=True)
         st.pydeck_chart(map_deck(R, S, show_comp), height=620)
 
-    t1, t2, t3 = st.tabs(["Filter funnel", "Location model", "Demand calibration"])
+    t1, t2, t3, t4 = st.tabs(["Filter funnel", "Location model", "Demand calibration", "Forecast & survival models"])
+    with t4:
+        e, cl = K.get("ensemble", {}), K.get("closure", {})
+        rows = [{"Model": "Analog (k nearest existing stores)", "Held-out error": e.get("analog_mae_pct"), "Tested on": f"{e.get('n')} stores, leave-one-out"},
+                {"Model": "Ridge regression on site features", "Held-out error": e.get("regression_mae_pct"), "Tested on": f"{e.get('n')} stores, leave-one-out"}]
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch",
+                     column_config={"Held-out error": st.column_config.NumberColumn(format="percent")})
+        st.caption("Error = mean absolute difference from each store's Huff-estimated customers when that store is left out. "
+                   "Measures consistency between methods, not error against real sales (no store-level sales are public).")
+        if cl.get("ok"):
+            st.write(f"**Closure model** (chain units in activity class `{cl['class']}`): {cl['n']:,} units, {cl['closed']} closed "
+                     f"({cl['closed_rate']:.1%}) · spatial-CV AUC **{(cl.get('auc') or 0):.2f}** — "
+                     + ("used in stage 10." if (cl.get("auc") or 0) >= EV.CLOSURE_MIN_AUC else f"below {EV.CLOSURE_MIN_AUC}: shown, not used to decide."))
+        else:
+            st.write("Closure model: not enough closed chain units in this activity class to fit one.")
     with t1:
         f = pd.DataFrame({"step": [s.replace("_", " ") for s in K["log"]], "units": list(K["log"].values())})
         st.altair_chart(alt.Chart(f).mark_bar(color="#ef233c").encode(
@@ -491,12 +530,33 @@ def page_unit():
     k[3].metric("Traspaso", eur(s["traspaso_eur"]) if s["traspaso_eur"] else "none")
     k[4].metric("Demand vs typical store", f"{s['demand_ratio']:.2f}×")
 
+    if isinstance(s.get("stages"), list):
+        dec = s["decision"]
+        st.markdown(f'#### Site committee · <span class="badge {dict(APPROVE="ok", CONDITIONAL="cond", REJECT="rej")[dec]}">{dec}</span>',
+                    unsafe_allow_html=True)
+        icon = {"pass": "✓", "flag": "!", "fail": "✗", "info": "·"}
+        st.markdown("".join(f'<div class="stg"><span class="n">{g["stage"]:02d}</span><span class="s {g["status"]}">{icon[g["status"]]}</span>'
+                            f'<span class="nm">{g["name"]}</span><span class="d">{g["detail"]}</span></div>' for g in sorted(s["stages"], key=lambda g: g["stage"])),
+                    unsafe_allow_html=True)
+        cA, cB = st.columns(2, gap="large")
+        with cA:
+            with st.expander("Field checks (stage 7)"):
+                for f in s["field"]:
+                    st.markdown(f"{'✓' if f['ok'] else '✗'} **{f['check']}** — {f['detail']}")
+        with cB:
+            with st.expander("Most similar existing stores (analogs, stage 5)"):
+                st_ = R.stores.reset_index(drop=True)
+                for i in s.get("analogs", [])[:7]:
+                    if i < len(st_):
+                        r_ = st_.iloc[i]
+                        st.markdown(f"- {r_.get('address') or r_.get('trade_name')} · {r_.get('barrio') or ''}")
     a, b = st.columns([1.1, 1], gap="large")
     with a:
         st.markdown("#### The money")
         if O["econ"]:
             rng = np.random.default_rng(int(s["rank"]) * 7)
-            rev, e, pb, inv = _pnl(max(s["demand_ratio"], 0), s["rent_year"], s["traspaso_eur"], O["econ"], rng, 10_000)
+            rev, e, pb, inv = _pnl(max(s["demand_ratio"], 0), s["rent_year"], s["traspaso_eur"], O["econ"], rng, 10_000,
+                                   float(s.get("sigma", MODEL_ERROR_SIGMA)))
             st.markdown(f"**EBITDA per year:** {eur(np.percentile(e, 10))} (pessimistic) · **{eur(np.median(e))}** (middle) · "
                         f"{eur(np.percentile(e, 90))} (optimistic)  \n**Payback:** {np.percentile(pb, 25):.1f}–{np.percentile(pb, 75):.1f} yrs "
                         f"(middle {np.median(pb):.1f}) · **P(payback ≤ {O['payback']:.0f}y): {(pb <= O['payback']).mean():.0%}** · "
@@ -506,7 +566,7 @@ def page_unit():
                 x=alt.X("EBITDA (€/yr):Q", bin=alt.Bin(maxbins=45)), y=alt.Y("count()", title="simulations")).properties(height=220),
                 width="stretch")
             st.caption("10,000 simulations: brand revenue and costs drawn from cited ranges, this unit's own rent and traspaso, "
-                       f"±{MODEL_ERROR_SIGMA:.0%} model error.")
+                       f"±{float(s.get('sigma', MODEL_ERROR_SIGMA)):.0%} uncertainty (model error {MODEL_ERROR_SIGMA:.0%} + disagreement between the three forecast methods).")
         else:
             st.info("No brand economics — add them in **Settings** to see this unit's P&L.")
         st.markdown("#### Why this unit")
@@ -578,6 +638,26 @@ def page_settings():
     payback = a.selectbox("Payback target", [2.0, 3.0, 4.0, 5.0, 7.0], index=[2.0, 3.0, 4.0, 5.0, 7.0].index(cfg["payback"]),
                           format_func=lambda v: f"{v:.0f} years")
 
+    st.markdown("### Site committee thresholds")
+    ev = {**EV.DEFAULTS, **cfg["eval"]}
+    e1, e2, e3, e4 = st.columns(4)
+    ev_new = {
+        "territory_m": e1.number_input("Protected radius around own stores (m)", 0, 3000, int(ev["territory_m"]), step=50),
+        "transfer_flag": e2.number_input("Sales transfer: needs consent above (%)", 0, 100, int(ev["transfer_flag"] * 100)) / 100,
+        "transfer_reject": e3.number_input("Sales transfer: reject above (%)", 0, 100, int(ev["transfer_reject"] * 100)) / 100,
+        "occupancy_max": e4.number_input("Max rent as % of sales", 1, 40, int(round(ev["occupancy_max"] * 100))) / 100,
+    }
+    e1, e2, e3, e4 = st.columns(4)
+    ev_new.update({
+        "sales_to_investment_min": e1.number_input("Min sales ÷ investment", 0.0, 10.0, float(ev["sales_to_investment_min"]), step=0.1),
+        "p_payback_min": e2.number_input("Min P(payback ≤ target) (%)", 0, 100, int(ev["p_payback_min"] * 100)) / 100,
+        "p_loss_max": e3.number_input("Max P(loss) (%)", 0, 100, int(ev["p_loss_max"] * 100)) / 100,
+        "w_huff": e4.number_input("Forecast weight: Huff (rest split analog/regression)", 0.0, 1.0, float(ev["w_huff"]), step=0.05),
+    })
+    ev_new["w_analog"] = ev_new["w_regression"] = round((1 - ev_new["w_huff"]) / 2, 4)
+    st.caption("Defaults: rent ≤ 10% of sales and the sales-transfer bands follow common franchisor practice (see Methodology); "
+               "the rest are starting assumptions — change them to match the franchisor's own rules.")
+
     st.markdown("### Brand economics")
     src = d.get("pnl_inputs") or {}
     rows = []
@@ -607,6 +687,11 @@ def page_settings():
                     changed[r1["key"]] = {"low": r1["Low"] if not pd.isna(r1["Low"]) else r1["Mid"], "mode": r1["Mid"],
                                           "high": r1["High"] if not pd.isna(r1["High"]) else r1["Mid"], "label": "user_assumption"}
         user["econ"] = {**(user.get("econ") or {}), **changed}
+        diff = {k: v for k, v in ev_new.items() if abs(float(v) - float(EV.DEFAULTS[k])) > 1e-9}
+        if diff:
+            user["eval"] = diff
+        else:
+            user.pop("eval", None)
         if user.get("m2_range") is None:
             user.pop("m2_range")
         SS["brand"] = brand
@@ -708,9 +793,9 @@ def page_methodology():
       reg [label="Brand registry\\n+ store inventory"]; dem [label="Demand surface\\n(calibrated on footfall)"];
       logit [label="Location model\\nlogistic + spatial CV"]; huff [label="Huff demand &\\ncompetition"];
       filt [label="Listing filters\\nsize · floor · zone · rent sanity"]; mc [label="P&L Monte Carlo\\nper listing", fillcolor="#fee2e2"];
-      rank [label="Greedy ranking\\n(cannibalisation)", fillcolor="#fee2e2"]; memo [label="Investment memo\\n(Claude, evidence-only)", fillcolor="#111827", fontcolor="white"];
+      rank [label="Greedy ranking\\n(cannibalisation)", fillcolor="#fee2e2"]; cmte [label="10-stage site\\ncommittee", fillcolor="#fee2e2"]; memo [label="Investment memo\\n(Claude, evidence-only)", fillcolor="#111827", fontcolor="white"];
       census -> reg; osm -> reg; census -> dem; osm -> dem; ped -> dem; reg -> logit; dem -> logit; dem -> huff; reg -> huff;
-      web -> filt; idea -> filt; filt -> logit; logit -> rank; huff -> mc; web -> mc; idea -> mc; mc -> rank; rank -> memo; web -> memo; }""")
+      web -> filt; idea -> filt; filt -> logit; logit -> rank; huff -> mc; web -> mc; idea -> mc; mc -> cmte; huff -> cmte; idea -> cmte; cmte -> rank; rank -> memo; web -> memo; }""")
     st.markdown("Order matters: **research → filter real listings → score → simulate the money → rank**. Money decides the ranking; "
                 "it is not a grade applied afterwards.")
 
@@ -802,21 +887,111 @@ def page_methodology():
                 "the brand's network and every remaining candidate is re-scored, so the list accounts for cannibalisation; picks "
                 "≥ 400 m apart. Without brand economics the metric is *customers per €1k of annual rent*.")
 
-    st.markdown("## 7 · Claude's role")
+    st.markdown("## 7 · Site evaluation — the franchisor's 10 stages")
+    st.markdown("Every unit in the shortlist pool goes through the same stages a franchisor's development team runs, before it can "
+                "be ranked. Each stage returns **✓ pass**, **! condition** or **✗ fail**; any fail → **REJECT**, any condition → "
+                "**CONDITIONAL**, otherwise **APPROVE**. Ranking = decision first, then money.")
+    D0 = EV.DEFAULTS
+    st.dataframe(pd.DataFrame([
+        {"#": 1, "Stage": "Market planning", "What a franchisor does": "Sizes how many units each market supports (whitespace)",
+         "What Seize computes": "District demand ÷ brand stores vs the brand's 75th-percentile district → headroom", "Decides?": "condition if no headroom"},
+        {"#": 2, "Stage": "Territory", "What a franchisor does": "Protected territory for existing franchisees",
+         "What Seize computes": f"Distance to nearest own store ≥ {D0['territory_m']} m", "Decides?": "fail"},
+        {"#": 3, "Stage": "Site criteria", "What a franchisor does": "Criteria sheet: m², floor, frontage, corner, kitchen extraction",
+         "What Seize computes": "Franchisor size range + floor (hard filter) + listing text parsed for frontage, corner, shop window", "Decides?": "filter"},
+        {"#": 4, "Stage": "Submission package", "What a franchisor does": "Franchisee files demographics, competition, rent terms",
+         "What Seize computes": "Dossier on the unit page: catchment, footfall, competitors, rent vs area, map", "Decides?": "info"},
+        {"#": 5, "Stage": "Sales forecast", "What a franchisor does": "Analog, regression and gravity models",
+         "What Seize computes": "Ensemble of Huff + analog + ridge regression; method disagreement widens the range", "Decides?": "condition if methods disagree"},
+        {"#": 6, "Stage": "Sales transfer", "What a franchisor does": "Impact study on nearby franchisees",
+         "What Seize computes": f"Huff before/after for every existing store: > {D0['transfer_flag']:.0%} consent · > {D0['transfer_reject']:.0%} reject", "Decides?": "condition / fail"},
+        {"#": 7, "Stage": "Field check", "What a franchisor does": "Site visit: access, visibility, generators, competition",
+         "What Seize computes": "6 data checks vs the brand's own stores (street level, transit, footfall, generators, competition, corner)", "Decides?": "condition if < half pass"},
+        {"#": 8, "Stage": "Underwriting", "What a franchisor does": "Pro forma: occupancy ratio, sales/investment, payback",
+         "What Seize computes": f"Rent ≤ {D0['occupancy_max']:.0%} of sales · sales ≥ {D0['sales_to_investment_min']}× investment · P(payback) ≥ {D0['p_payback_min']:.0%} · P(loss) ≤ {D0['p_loss_max']:.0%}", "Decides?": "fail on probabilities, condition on ratios"},
+        {"#": 9, "Stage": "Committee", "What a franchisor does": "Real-estate committee votes", "What Seize computes": "Combines 1–8 and 10 into one decision with reasons", "Decides?": "—"},
+        {"#": 10, "Stage": "Licensing & survival", "What a franchisor does": "Lease, licence, permits; post-opening review",
+         "What Seize computes": "Smoke outlet (food), prior use, works, traspaso; closure-risk model on open vs closed chain units", "Decides?": "fail if listing says no smoke outlet"},
+    ]), hide_index=True, width="stretch")
+    st.markdown("**7.1 Forecast ensemble (stage 5).** Three estimates of a unit's customers relative to the brand's median store:")
+    st.latex(r"\hat r_{\text{Huff}}=\frac{\text{Own}_j}{\text{Own}_{\text{median}}},\qquad "
+             r"\hat r_{\text{analog}}=\exp\!\Big(\frac{\sum_{k\in N_7(j)} w_k \log r_k}{\sum_k w_k}\Big),\ w_k=\frac{1}{d_{jk}+0.25},\qquad "
+             r"\hat r_{\text{reg}}=\exp(\hat\beta^\top z_j)")
+    st.latex(r"\hat r=\exp\Big(\textstyle\sum_m \omega_m \log \hat r_m\Big),\quad \omega=(0.5,0.25,0.25),\qquad "
+             r"\sigma_{\text{total}}=\sqrt{\sigma_{\text{model}}^2+\operatorname{sd}_m(\log\hat r_m)^2}")
+    st.markdown("$N_7(j)$ = the 7 existing stores nearest in standardised feature space; ridge regression ($\alpha=3$) is fitted on "
+                "the existing stores. Both are tested leave-one-store-out (Analyse → *Forecast & survival models*).")
+    st.markdown("**7.2 Sales transfer (stage 6).** For each existing store $s$, its own capture before and after the candidate opens:")
+    st.latex(r"T_s = 1-\frac{\sum_i D_i\,w_{is}/(W_i+w_{ij}+B_i)}{\sum_i D_i\,w_{is}/(W_i+B_i)}")
+    st.markdown("$W_i$ = the brand's total pull in section $i$, $B_i$ = competitors + outside option. The maximum $T_s$ is reported.")
+    st.markdown("**7.3 Closure model (stage 10).** Logistic regression, P(closed) for chain units in the brand's activity class "
+                "(census status *Cerrado* with the chain's sign still registered vs *Abierto*), same features, spatial CV. "
+                f"Used in the decision only if AUC ≥ {EV.CLOSURE_MIN_AUC}. The census has no dates, so this is a cross-sectional "
+                "proxy for failure, not a time-to-closure (Cox) model.")
+    st.markdown("**7.4 Listing text (stages 3, 7, 10).** Spanish regex on the Idealista description: *salida de humos / chimenea / "
+                "extracción* (and *sin salida de humos*), *esquina / chaflán*, *escaparate*, *N m de fachada*, prior food use, licence, "
+                "works needed. A missing mention is a question for the agent, not a fail.")
+
+    st.markdown("## 8 · The models the industry uses — and where each stands in Seize")
+    st.dataframe(pd.DataFrame([
+        {"Model": "Analog (comparable stores)", "Used for": "Sales forecast", "In Seize": "✓ stage 5",
+         "Note": "Most common; depends on choosing good analogs"},
+        {"Model": "Multiple regression", "Used for": "Sales forecast", "In Seize": "✓ stage 5 (ridge)",
+         "Note": "Needs store sales to be fully calibrated"},
+        {"Model": "Huff gravity", "Used for": "Market share / trade area", "In Seize": "✓ demand, forecast, transfer",
+         "Note": "Decay and activity weight fitted per brand"},
+        {"Model": "MCI (multiplicative competitive interaction)", "Used for": "Huff with many store attributes, fitted by log-centring OLS",
+         "In Seize": "✗ not yet", "Note": "Needs observed market shares or store sizes for existing stores"},
+        {"Model": "Logistic location (presence/background)", "Used for": "Where the brand chooses to be", "In Seize": "✓ suitability gate",
+         "Note": "Spatial CV"},
+        {"Model": "Machine learning (random forest, gradient boosting)", "Used for": "Sales / site scoring with many features",
+         "In Seize": "✗ not yet", "Note": "Needs more labelled stores than most brands have in Madrid; risk of overfitting"},
+        {"Model": "Sales-transfer / impact study", "Used for": "Encroachment on franchisees", "In Seize": "✓ stage 6", "Note": ""},
+        {"Model": "Location-allocation (p-median, max coverage)", "Used for": "Network planning: where to put P stores",
+         "In Seize": "≈ greedy ranking", "Note": "Greedy add-the-best with Huff, picks re-scored"},
+        {"Model": "Survival / closure model", "Used for": "Risk that a site fails", "In Seize": "✓ stage 10 (cross-sectional)",
+         "Note": "Time-to-closure needs dated census snapshots"},
+        {"Model": "Monte Carlo P&L", "Used for": "Underwriting under uncertainty", "In Seize": "✓ stage 8", "Note": ""},
+        {"Model": "Mobile-location (foot-traffic) data", "Used for": "Visits, trade areas, transfer", "In Seize": "✗ (paid data)",
+         "Note": "Pedestrian counters + Google review counts are the open stand-ins"},
+    ]), hide_index=True, width="stretch")
+    st.markdown("""
+**Sources**
+- [Rogers (1992), review of sales-forecasting models in retail site evaluation](https://doi.org/10.1108/09590559210015531)
+- [Wieland (2017), Huff and MCI models, *R Journal*](https://journal.r-project.org/articles/RJ-2017-020/)
+- [GrowthFactor — analog sales projections](https://docs.growthfactor.ai/analyze-site-intelligence-and-selection/sales-projections)
+- [Kalibrate — sales transfer in franchised restaurants](https://kalibrate.com/insights/blog/location-intelligence/a-slice-of-the-pie-sales-transfer-in-franchised-restaurants)
+- [Kalnins (2004), territorial encroachment, *Marketing Science*](https://doi.org/10.1287/mksc.1040.0082)
+- [Kim & Jap (2021), can encroachment benefit franchisees?, *Journal of Marketing*](https://www.ama.org/can-encroachment-benefit-hotel-franchisees/)
+- [Han et al. (2022), machine learning for profitable restaurant locations, *J. Business Research*](https://econpapers.repec.org/RePEc:eee:jbrese:v:144:y:2022:i:c:p:416-427)
+- [Random forest site selection, Luckin & Starbucks Shanghai (2025)](https://mdpi.com/2220-9964/14/6/217)
+- [Warren & Gordon-Larsen (2018), spatial survival model of store closure](https://ideas.repec.org/a/bla/jorssa/v181y2018i3p783-802.html)
+- [p-median location-allocation (UC Berkeley IEOR 151)](https://aswani.ieor.berkeley.edu/teaching/FA14/151/lecture_notes/ieor151_lec13.pdf) ·
+  [Maximal covering location problem](https://metricgate.com/docs/maximal-covering-location-mclp/)
+- Occupancy benchmarks: [8–10% of sales](https://restaurantbusinessonline.com/advice-guy/how-figure-out-prime-cost-occupancy-percentages) ·
+  [filed 10-Ks show 1.6–7.7%](https://www.katalystos.com/blog/restaurant-lease-negotiation)
+- Smoke extraction in Madrid hospitality: [Legálitas](https://www.legalitas.com/actualidad/como-montar-restaurante) ·
+  [multi-level rules, municipal ordinance decides](https://qamarero.com/blog/normativa-salida-de-humos-bares-y-restaurantes/)
+""")
+
+    st.markdown("## 9 · Claude's role")
     st.markdown("""
 | Task | What Claude does | What it may not do |
 |---|---|---|
 | Franchise research (step 1, cached per brand) | Web search; eligibility in Spain, who provides premises, fees, investment, revenue, cost ratios, unit size — each cited and labelled | Invent a number; present a non-Spain figure as Spanish |
 | Investment memo | Verdict and unit-by-unit reasoning from the evidence pack | Use any number not in the evidence pack; change model outputs |
 """)
-    st.markdown("## 8 · Limitations")
+    st.markdown("## 10 · Limitations")
     st.markdown("""
 - **Listings coverage:** ~2,500 units; Idealista caps results per search, so coverage may be incomplete.
 - **Revenue:** brand average × modelled demand; no measured sales per store. Google review counts (next) will calibrate demand on real visits.
 - **Footfall calibration:** 31 sensors, mostly central shopping streets.
 - **Distance:** straight-line, not walking network.
-- **Units:** as advertised; licence (e.g. hostelería smoke extraction), condition and frontage are not verified.
-- **Not yet built:** survival model on 2014–2026 openings/closures; out-of-time backtest (train 2019 → predict 2024).
+- **Units:** as advertised; smoke outlet, frontage and corner come from the listing text — not verified on site.
+- **Forecast ensemble:** all three methods estimate customers, not euros of sales; they are checked against each other, not against
+  real store sales (not public). Ensemble weights are an assumption, editable in Settings.
+- **Closure model:** one census snapshot, so closed vs open rather than time to closure; few closed chain units → often weak.
+- **Not yet built:** MCI with store attributes; out-of-time backtest (needs a dated census snapshot to compare against).
 """)
 
 

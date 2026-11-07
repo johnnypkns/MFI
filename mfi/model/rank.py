@@ -17,7 +17,8 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 
-from .site_model import INDUSTRIAL_SHARE_MAX, get_surface, transform
+from . import evaluate as EV
+from .site_model import FEATURES, INDUSTRIAL_SHARE_MAX, get_surface, transform
 
 MODEL_ERROR_SIGMA = 0.20      # lognormal noise on revenue: model error around the demand estimate (assumption, shown)
 RENT_OUTLIER = (0.35, 3.0)    # listing €/m² vs the median of comparable listings within 1 km
@@ -63,11 +64,11 @@ def _own(huff, cur, w):
     return np.array([huff.own_capture(cur + w[:, j], w[:, j]) for j in range(w.shape[1])])
 
 
-def _pnl(rev_mult, rent_year, inv, econ, rng, N):
+def _pnl(rev_mult, rent_year, inv, econ, rng, N, sigma=MODEL_ERROR_SIGMA):
     tri = lambda k: rng.triangular(*econ[k], N) if econ[k][0] < econ[k][2] else np.full(N, econ[k][1])
     auv = tri("auv_eur")
     var = (tri("cogs_pct") + tri("labour_pct") + tri("royalty_pct") + tri("marketing_pct") + tri("other_opex_pct")) / 100
-    rev = auv * rev_mult * rng.lognormal(0, MODEL_ERROR_SIGMA, N)
+    rev = auv * rev_mult * rng.lognormal(0, sigma, N)
     if "occupancy_pct" in econ:                       # franchisor provides the property: rent = % of sales
         rent_year = rev * tri("occupancy_pct") / 100
     ebitda = rev * (1 - var) - rent_year
@@ -77,9 +78,11 @@ def _pnl(rev_mult, rent_year, inv, econ, rng, N):
 
 
 def rank(data, R, listings, econ=None, n=5, m2_range=(60, 600), floors=("ground", "mezzanine", "unknown"),
-         payback_target=4.0, pool=120, N=4000, seed=5):
+         payback_target=4.0, pool=120, N=4000, seed=5, eval_params=None, food=False, closure=None):
     """econ: {key: (low, mode, high)} for auv_eur, cogs_pct, labour_pct, royalty_pct, marketing_pct, other_opex_pct,
-    investment_eur. None -> rank by demand per euro of rent."""
+    investment_eur. None -> rank by demand per euro of rent. Every unit in the pool goes through the 10-stage
+    evaluation (evaluate.py); ranking = committee decision first (APPROVE > CONDITIONAL > REJECT), then money."""
+    P = {**EV.DEFAULTS, **(eval_params or {})}
     rng = np.random.default_rng(seed)
     c = R.ctx
     cand, log = candidates(data, R, listings, m2_range, floors)
@@ -98,42 +101,79 @@ def rank(data, R, listings, econ=None, n=5, m2_range=(60, 600), floors=("ground"
     df["demand_ratio"] = np.minimum(_own(huff, cur, W) / med, cap)
     df["rent_year"] = df["rent_month"] * 12
     df["demand_per_k_rent"] = df["demand_ratio"] * med / (df["rent_year"] / 1000)
-    # pre-screen the pool for the expensive steps
     key = "demand_ratio" if econ else "demand_per_k_rent"
     df = df.nlargest(pool, key).reset_index(drop=True)
     W = huff.weights(df[["x", "y"]].values)
 
-    picks, alive = [], np.ones(len(df), bool)
+    # ---- static parts of the 10 stages (don't change as picks are added)
+    df["district"] = df["district_name"]
+    head = EV.market_headroom(data, R)
+    sec = data.sections.dropna(subset=["pop_total"])            # district = that of the nearest census section
+    dc = pd.Series(sec["district_code"].astype(int).values[cKDTree(sec[["x", "y"]].values).query(df[["x", "y"]].values)[1]])
+    df["district_code_est"] = dc.values
+    df["district_headroom"] = dc.map(head["headroom"]).values
+    df["text"] = df["description"].map(EV.parse_listing)
+    ens = EV.Ensemble(R, P)
+    Xc = transform(df[FEATURES]).values
+    ref = EV.brand_reference(R)
+    df["field"] = [EV.field_checks(r, ref, r["text"]) for r in df.to_dict("records")]
+    if closure and closure.get("ok"):
+        pc = closure["model"].predict_proba(transform(df[FEATURES]))[:, 1]
+        df["closure_p"] = pc
+        df["closure_rel"] = pc / max(closure["score_quantiles"][1], 1e-6)   # vs the median chain unit in the class
+        df["closure_valid"] = (closure.get("auc") or 0) >= EV.CLOSURE_MIN_AUC
+    Wnet = huff.weights(c["stores_xy"])
+
+    picks, alive, first_round = [], np.ones(len(df), bool), None
     for r in range(1, n + 1):
-        ratio = np.minimum(_own(huff, cur, W) / med, cap)
+        hr = np.minimum(_own(huff, cur, W) / med, cap)
+        F = ens.predict(Xc, np.maximum(hr, 1e-3))
+        T = EV.transfer(huff, cur, Wnet, W)                     # existing (+picked) stores x candidates
+        tmax = T.max(0) if T.shape[0] else np.zeros(len(df))
+        evals = []
+        for j in range(len(df)):
+            if not alive[j]:
+                evals.append(None)
+                continue
+            row = df.iloc[j].to_dict()
+            row.update({k: F.iloc[j][k] for k in F.columns}, transfer_max=float(tmax[j]), demand_ratio=float(F.iloc[j]["f_blend"]),
+                       huff_ratio=float(hr[j]))
+            if econ:
+                sig = float(np.hypot(MODEL_ERROR_SIGMA, F.iloc[j]["f_spread"]))
+                rev, e, pb, inv = _pnl(row["f_blend"], row["rent_year"], row["traspaso_eur"], econ, rng, N, sig)
+                rs = (row["rent_year"] / np.median(rev)) if "occupancy_pct" not in econ else econ["occupancy_pct"][1] / 100
+                row.update(p_payback=float((pb <= payback_target).mean()), ebitda_p50=float(np.median(e)), p_loss=float((e <= 0).mean()),
+                           rent_share=float(rs), sales_to_investment=float(np.median(rev) / np.median(inv)), sigma=sig)
+            dec, reasons, stages = EV.committee(row, P, food, payback_target, bool(econ))
+            row.update(decision=dec, reasons=reasons, stages=stages)
+            evals.append(row)
+        if r == 1:
+            first_round = pd.Series([e["decision"] for e in evals if e]).value_counts().to_dict()
         if econ:
-            stats = []
-            for j in range(len(df)):
-                if not alive[j]:
-                    stats.append((-1, -np.inf))
-                    continue
-                _, e, pb, _ = _pnl(max(ratio[j], 0), df.at[j, "rent_year"], df.at[j, "traspaso_eur"], econ, rng, N)
-                stats.append(((pb <= payback_target).mean(), np.median(e)))
-            order = sorted(range(len(df)), key=lambda j: stats[j], reverse=True)
+            keyf = lambda e: (EV.STATUS_ORDER[e["decision"]], -e["p_payback"], -e["ebitda_p50"])
         else:
-            val = np.where(alive, ratio * med / (df["rent_year"].values / 1000), -np.inf)
-            order = list(np.argsort(-val))
-        j = order[0]
-        if not alive[j]:
+            keyf = lambda e: (EV.STATUS_ORDER[e["decision"]], -e["demand_ratio"] * med / (e["rent_year"] / 1000))
+        live = [j for j in range(len(df)) if evals[j] is not None]
+        if not live:
             break
-        row = df.iloc[j].to_dict()
-        row.update(rank=r, demand_ratio=float(ratio[j]))
+        j = min(live, key=lambda j: keyf(evals[j]))
+        row = evals[j]
+        row["rank"] = r
         if econ:
-            rev, e, pb, inv = _pnl(max(ratio[j], 0), row["rent_year"], row["traspaso_eur"], econ, np.random.default_rng(seed + r), 10_000)
-            row.update(revenue_p50=np.median(rev), ebitda_p10=np.percentile(e, 10), ebitda_p50=np.median(e),
-                       ebitda_p90=np.percentile(e, 90), p_loss=(e <= 0).mean(), payback_p50=np.median(pb),
-                       p_payback=(pb <= payback_target).mean(), invest_p50=np.median(inv),
-                       rent_share=(row["rent_year"] / np.median(rev)) if "occupancy_pct" not in econ else econ["occupancy_pct"][1] / 100,
-                       roic_p50=np.median(e / inv))
+            sig = row["sigma"]
+            rev, e, pb, inv = _pnl(row["f_blend"], row["rent_year"], row["traspaso_eur"], econ, np.random.default_rng(seed + r), 10_000, sig)
+            row.update(revenue_p10=np.percentile(rev, 10), revenue_p50=np.median(rev), revenue_p90=np.percentile(rev, 90),
+                       ebitda_p10=np.percentile(e, 10), ebitda_p50=np.median(e), ebitda_p90=np.percentile(e, 90),
+                       p_loss=(e <= 0).mean(), payback_p50=np.median(pb), p_payback=(pb <= payback_target).mean(),
+                       invest_p50=np.median(inv), roic_p50=np.median(e / inv))
+        row["analogs"] = [int(i) for i in row.pop("analog_idx")]
         picks.append(row)
         cur = cur + W[:, j]                                  # cannibalisation: next pick competes with this one
+        Wnet = np.hstack([Wnet, W[:, j:j + 1]])
         alive &= np.hypot(df["x"].values - df.at[j, "x"], df["y"].values - df.at[j, "y"]) >= 400
     out = pd.DataFrame(picks)
-    return {"ok": True, "sites": out, "log": log, "metric": "P(payback ≤ %.0fy), then median EBITDA" % payback_target
-            if econ else "captured demand per €1k of annual rent", "pool": len(df), "model_error_sigma": MODEL_ERROR_SIGMA,
-            "demand_cap": cap}
+    return {"ok": True, "sites": out, "log": log, "metric": ("committee decision, then P(payback ≤ %.0fy), then median EBITDA" % payback_target)
+            if econ else "committee decision, then captured demand per €1k of annual rent", "pool": len(df),
+            "model_error_sigma": MODEL_ERROR_SIGMA, "demand_cap": cap, "decisions": first_round or {},
+            "ensemble": ens.loo, "headroom": head, "closure": {k: v for k, v in (closure or {}).items() if k != "model"},
+            "eval_params": P}

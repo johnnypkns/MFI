@@ -120,6 +120,11 @@ def verdict(brand, O, conf):
         else:
             lines.append(f"Best unit by customers per euro of rent: **{s['address']}** — {s['m2']:.0f} m² at "
                          f"{eur(s['rent_month'])}/month, demand {s['demand_ratio']:.2f}× a typical {brand} store.")
+        if "decision" in s:
+            n_ok = sum(1 for d in K["sites"]["decision"] if d == "APPROVE")
+            why = (" — " + s["reasons"][0].split(": ", 1)[-1]) if s["decision"] != "APPROVE" and s.get("reasons") else ""
+            lines.append(f"Committee view (10-stage check): **{s['decision']}**{why}. "
+                         f"{n_ok} of {len(K['sites'])} shortlisted units pass every stage.")
         if c is not None:
             weakest = min(conf[0]["parts"], key=conf[0]["parts"].get)
             lines.append(f"Confidence **{c}/100 ({grade(c)})** — weakest link: {LABELS[weakest].lower()}.")
