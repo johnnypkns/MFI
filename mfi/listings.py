@@ -29,10 +29,11 @@ def _num(v):
         return np.nan
 
 
-def load_raw(raw_dir=None):
+def load_raw(raw_dir=None, files=None):
     raw_dir = Path(raw_dir or ROOT / "data" / "raw" / "apify" / "listings")
     rows = []
-    for f in sorted(raw_dir.glob("*.json")):
+    for f in (files or sorted(raw_dir.glob("*.json"))):
+        f = Path(f)
         for it in json.loads(f.read_text()):
             dt, pi = it.get("detailedType") or {}, it.get("priceInfo") or {}
             if isinstance(dt, str):

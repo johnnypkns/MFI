@@ -24,7 +24,7 @@ from mfi.stores import inventory, load_osm, missing_from_census
 st.set_page_config(page_title="Seize · Site Selection Engine", page_icon="🔴", layout="wide", initial_sidebar_state="collapsed")
 RED, WHITE, GREY = [239, 35, 60], [245, 245, 247], [120, 120, 130]
 SS = st.session_state
-DATA_VERSION = "2026-11-07a"   # bump when the data model changes: forces a fresh load after a redeploy
+DATA_VERSION = "2026-11-08a"   # bump when the data model changes: forces a fresh load after a redeploy
 
 st.markdown("""
 <style>
@@ -305,7 +305,11 @@ def analyse(brand, n, allow_research=True):
         st.write(f"✓ **Location model** — accuracy {m['auc_spatial_cv']:.2f} AUC ({m['reliability']}), districts held out")
         # 3 screen + simulate + rank
         econ, missing, rent_model, _ = pipeline.econ_from_profile(prof, cfg["overrides"])
-        st.write(f"⧗ **Screening {len(listings()):,} units for rent** and simulating each one's P&L…")
+        try:
+            asof = json.loads((APP / "listings_log.json").read_text()).get("scraped_at") or "2026-11-04"
+        except Exception:
+            asof = "2026-11-04"
+        st.write(f"⧗ **Screening {len(listings()):,} units for rent** (Idealista, listings as of {asof}) and simulating each one's P&L…")
         K = ranked_for(brand, n, cfg["m2_range"], cfg["floors"], cfg["payback"],
                        json.dumps({k: list(v) for k, v in econ.items()}) if econ else "",
                        json.dumps(cfg["eval"], sort_keys=True) if cfg["eval"] else "")
@@ -465,6 +469,12 @@ def page_analyse():
             color=alt.Color("direction:N", scale=alt.Scale(domain=["more likely", "less likely"], range=["#ef233c", "#787882"]),
                             legend=None)).properties(height=300), width="stretch")
         b.write(f"Spatial-CV AUC **{m['auc_spatial_cv']:.3f}** ({m['reliability']}) · folds {m['auc_folds']}")
+        names_ = {"logistic": "Logistic regression", "random_forest": "Random forest", "gradient_boosting": "Gradient boosting"}
+        if m.get("model_comparison"):
+            b.dataframe(pd.DataFrame([{"Model": names_[k] + (" ← used" if k == m.get("model_used") else ""), "AUC (districts held out)": v}
+                                      for k, v in m["model_comparison"].items()]), hide_index=True, width="stretch")
+            b.caption("Same folds for all three. A machine-learning model replaces the logistic only if it is ≥ 0.02 AUC better "
+                      "and the brand has ≥ 15 stores. The bar chart shows the logistic's effects (the explainable model).")
         b.write(f"{m['stores']} stores vs {m['background_n']:,} background premises · activity `{m['category']}`")
     with t3:
         cal = demand_cal(data()) or {}
@@ -871,7 +881,9 @@ def page_methodology():
                 f"(held-out sensors {cal.get('spearman_leave_one_out', 0):.2f}) vs residents only {cal.get('baseline_residents_only', 0):.2f} "
                 f"and the old all-premises proxy {cal.get('baseline_v0_all_premises', 0):.2f}. λ = {cal.get('lambda_m')} m.")
     st.markdown("**5.2 Location model — where does this brand choose to be?** Logistic regression, brand stores vs background "
-                "street-level premises, standardised features $z$, validated by **spatial cross-validation** (whole districts held out):")
+                "street-level premises, standardised features $z$, validated by **spatial cross-validation** (whole districts held out). "
+                "A random forest and a gradient-boosting model are scored on the same folds; one replaces the logistic only if it "
+                "is ≥ 0.02 AUC better (brands with ≥ 15 stores):")
     st.latex(r"P(\text{store}\mid \mathbf{x}) = \frac{1}{1+e^{-(\beta_0+\boldsymbol\beta^\top \mathbf z)}},\qquad "
              r"\text{AUC}=P\big(\hat p(\text{store}) > \hat p(\text{background})\big)")
     st.markdown("Reliability label: AUC < 0.60 **unreliable** (red banner) · 0.60–0.70 weak · 0.70–0.80 usable · > 0.80 good. "
@@ -950,11 +962,11 @@ def page_methodology():
         {"Model": "Huff gravity", "Used for": "Market share / trade area", "In Seize": "✓ demand, forecast, transfer",
          "Note": "Decay and activity weight fitted per brand"},
         {"Model": "MCI (multiplicative competitive interaction)", "Used for": "Huff with many store attributes, fitted by log-centring OLS",
-         "In Seize": "✗ not yet", "Note": "Needs observed market shares or store sizes for existing stores"},
+         "In Seize": "◐ code ready", "Note": "Fits once Google Maps review counts (visits proxy) + store attributes are pulled"},
         {"Model": "Logistic location (presence/background)", "Used for": "Where the brand chooses to be", "In Seize": "✓ suitability gate",
          "Note": "Spatial CV"},
         {"Model": "Machine learning (random forest, gradient boosting)", "Used for": "Sales / site scoring with many features",
-         "In Seize": "✗ not yet", "Note": "Needs more labelled stores than most brands have in Madrid; risk of overfitting"},
+         "In Seize": "✓ competes per brand", "Note": "Replaces the logistic only if ≥0.02 AUC better on held-out districts (≥15 stores)"},
         {"Model": "Sales-transfer / impact study", "Used for": "Encroachment on franchisees", "In Seize": "✓ stage 6", "Note": ""},
         {"Model": "Location-allocation (p-median, max coverage)", "Used for": "Network planning: where to put P stores",
          "In Seize": "≈ greedy ranking", "Note": "Greedy add-the-best with Huff, picks re-scored"},
@@ -1000,7 +1012,8 @@ def page_methodology():
 - **Forecast ensemble:** all three methods estimate customers, not euros of sales; they are checked against each other, not against
   real store sales (not public). Ensemble weights are an assumption, editable in Settings.
 - **Closure model:** one census snapshot, so closed vs open rather than time to closure; few closed chain units → often weak.
-- **Not yet built:** MCI with store attributes; out-of-time backtest (needs a dated census snapshot to compare against).
+- **Not yet live:** MCI (code ready, waits for the Google Maps pull); out-of-time backtest (needs a dated census snapshot).
+- **Listings:** refreshed weekly (Mondays) by a scheduled job; between refreshes every analysis uses that week's pull.
 """)
 
 

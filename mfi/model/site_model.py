@@ -23,6 +23,7 @@ import json
 import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
+from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GroupKFold
@@ -30,6 +31,9 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 from .export import APP, norm_name
+
+ML_MIN_STORES = 15     # random forest / gradient boosting only compete when the brand has this many stores
+ML_MIN_GAIN = 0.02     # ...and replace the logistic only if spatial-CV AUC improves by at least this much
 
 PARAMS = dict(
     huff_decay_m=700,          # distance at which a store's pull falls to 1/e. ~9-min walk. ASSUMPTION until calibrated on review counts.
@@ -359,19 +363,41 @@ def run(data: Data, query: str, n_sites=5, P=PARAMS, extra_stores: pd.DataFrame 
     y = train["is_brand"].values
     model = make_pipeline(StandardScaler(), LogisticRegression(C=1.0, class_weight="balanced", max_iter=2000))
 
-    # ---- spatial cross-validation: hold out whole districts
+    # ---- spatial cross-validation: hold out whole districts. Three model families compete on the SAME folds;
+    # a machine-learning model replaces the logistic only if it beats it by >= ML_MIN_GAIN (small brands overfit).
     groups = train["district_code"].fillna(-1).values
     k = min(5, len(np.unique(groups[y == 1])))
-    aucs = []
-    if k >= 3:
-        for tr, te in GroupKFold(n_splits=k).split(X, y, groups):
-            if y[te].sum() == 0 or y[te].sum() == len(te):
-                continue
-            model.fit(X.iloc[tr], y[tr])
-            aucs.append(roc_auc_score(y[te], model.predict_proba(X.iloc[te])[:, 1]))
-    model.fit(X, y)
+    candidates_m = {
+        "logistic": model,
+        "random_forest": RandomForestClassifier(n_estimators=300, min_samples_leaf=10, max_features="sqrt",
+                                                class_weight="balanced_subsample", n_jobs=-1, random_state=P["seed"]),
+        "gradient_boosting": HistGradientBoostingClassifier(max_depth=3, learning_rate=0.05, max_iter=200,
+                                                            min_samples_leaf=20, l2_regularization=1.0,
+                                                            class_weight="balanced", random_state=P["seed"]),
+    }
+    folds = list(GroupKFold(n_splits=k).split(X, y, groups)) if k >= 3 else []
+    folds = [(tr, te) for tr, te in folds if 0 < y[te].sum() < len(te)]
+    cv = {}
+    for name, m_ in candidates_m.items():
+        if name != "logistic" and y.sum() < ML_MIN_STORES:
+            continue
+        a_ = []
+        for tr, te in folds:
+            m_.fit(X.iloc[tr], y[tr])
+            a_.append(roc_auc_score(y[te], m_.predict_proba(X.iloc[te])[:, 1]))
+        cv[name] = a_
+    mean = {n: float(np.mean(v)) for n, v in cv.items() if v}
+    model_name = "logistic"
+    if mean:
+        best = max(mean, key=mean.get)
+        if best != "logistic" and mean[best] >= mean.get("logistic", 0) + ML_MIN_GAIN:
+            model_name = best
+    aucs = cv.get(model_name, [])
+    model.fit(X, y)                                       # logistic always fitted: its coefficients explain the model
     coefs = pd.DataFrame({"feature": [FEATURE_LABELS[f] for f in FEATURES],
                           "effect": model[-1].coef_[0]}).sort_values("effect", key=abs, ascending=False)
+    if model_name != "logistic":
+        model = candidates_m[model_name].fit(X, y)
     auc = float(np.mean(aucs)) if aucs else None
     reliability = ("unreliable" if auc is None or auc < 0.60 else "weak" if auc < 0.70 else "usable" if auc < 0.80 else "good")
     if reliability == "unreliable":
@@ -442,6 +468,7 @@ def run(data: Data, query: str, n_sites=5, P=PARAMS, extra_stores: pd.DataFrame 
 
     metrics = dict(
         stores=len(stores), category=category, competitors=len(fs.comp), reliability=reliability,
+        model_used=model_name, model_comparison={n: round(v, 3) for n, v in mean.items()},
         auc_spatial_cv=auc, auc_folds=[round(a, 3) for a in aucs],
         background_n=len(bg), candidates_vacant=len(cand), candidates_pass_gate=n_gate,
         gate_score=gate, median_existing_store_demand=median_store,
