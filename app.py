@@ -351,18 +351,22 @@ def page_analyse():
         opts = opts[opts["sector"] == sector]
     names = opts["brand"].tolist()
     lab = {r.brand: f"{stat[r.brand][0]}  {r.brand}  ·  {r.n_stores} stores  ·  {stat[r.brand][1]}" for r in opts.itertuples()}
-    cur = SS.get("brand", "Telepizza")
-    brand = c1.selectbox("Franchise", names, index=names.index(cur) if cur in names else 0, format_func=lambda b: lab.get(b, b),
-                         label_visibility="collapsed")
+    cur = SS.get("brand")
+    brand = c1.selectbox("Franchise", names, index=names.index(cur) if cur in names else None, format_func=lambda b: lab.get(b, b),
+                         placeholder="Choose a franchise…", label_visibility="collapsed")
     n_sites = c2.selectbox("Sites", [3, 5, 10], index=[3, 5, 10].index(SS.get("n_sites", 5)), label_visibility="collapsed",
                            format_func=lambda n: f"Top {n}")
-    go = c3.button("ANALYSE →", type="primary", width="stretch")
+    go = c3.button("ANALYSE →", type="primary", width="stretch", disabled=brand is None)
+    if brand is None:
+        st.markdown('<p class="muted">Pick a franchise from the list — ✓ franchisable · ✗ not franchised · ⚠ low-confidence model · '
+                    '? unclear · · not yet verified — then press <b>ANALYSE</b>.</p>', unsafe_allow_html=True)
+        return
     cfg = settings_for(brand)
     st.markdown(f'<p class="muted">Units {cfg["m2_range"][0]}–{cfg["m2_range"][1]} m² <i>({cfg["m2_source"]})</i> · '
                 f'floors: {", ".join(cfg["floors"])} · payback target {cfg["payback"]:.0f} yrs</p>', unsafe_allow_html=True)
     st.page_link(PAGES["settings"], label="Adjust the model in Settings →")
 
-    if go or ("out" not in SS) or (SS.get("out", {}).get("brand") != brand and go):
+    if go:
         try:
             analyse(brand, n_sites)
         except ValueError as e:
@@ -619,10 +623,12 @@ def why_lines(R, s):
 # ================================================================== SETTINGS
 def page_settings():
     hero("Adjust the model. Every value starts from cited research; anything you change is marked as your assumption.")
-    brand = SS.get("brand", "Telepizza")
+    brand = SS.get("brand")
     reg = registry()
     names = reg[reg["n_stores"] >= 3]["brand"].tolist()
-    brand = st.selectbox("Brand", names, index=names.index(brand) if brand in names else 0)
+    brand = st.selectbox("Brand", names, index=names.index(brand) if brand in names else None, placeholder="Choose a franchise…")
+    if brand is None:
+        return
     cfg = settings_for(brand)
     prof = cfg["profile"]
     d = (prof or {}).get("data") or {}
