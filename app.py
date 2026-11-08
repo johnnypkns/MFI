@@ -244,7 +244,7 @@ ECON_LABELS = {"auv_eur": "Average revenue per store (€/yr)", "cogs_pct": "Foo
 
 def settings_for(brand):
     """Effective settings: research defaults, then the user's overrides from the Settings page."""
-    prof = pipeline.cached_research(brand)
+    prof = SS.setdefault("research", {}).get(brand)      # this session's fresh research only — nothing pre-saved
     d = (prof or {}).get("data") or {}
     _, _, rent_model, m2_suggest = pipeline.econ_from_profile(prof)
     user = SS.setdefault("settings", {}).get(brand, {})
@@ -253,7 +253,7 @@ def settings_for(brand):
     url = (src or "").split(" ")[0] if src and src.startswith("http") else None
     m2_source = "your setting" if user.get("m2_range") else (
         (f'franchisor requirement — <a href="{url}" target="_blank">source ↗</a>' if url else "franchisor requirement (research)")
-        if m2_suggest else "default — no franchisor figure found yet")
+        if m2_suggest else ("default — research found no franchisor figure" if prof else "default until research runs"))
     return {"profile": prof, "m2_range": tuple(int(v) for v in m2), "m2_source": m2_source,
             "floors": tuple(user.get("floors") or ("ground", "mezzanine", "unknown")),
             "payback": float(user.get("payback") or 4.0), "overrides": user.get("econ") or {}, "rent_model": rent_model,
@@ -262,6 +262,7 @@ def settings_for(brand):
 
 def safe_research(brand):
     """Run Claude research; never crash the app on API problems (e.g. no credit)."""
+    SS.setdefault("research", {}).pop(brand, None)       # never fall back to an older run's research
     try:
         prof = reasoning.research_franchise(brand)
     except Exception as e:
@@ -273,7 +274,7 @@ def safe_research(brand):
             st.error(f"Claude research failed ({type(e).__name__}). Ranking continues without brand economics.")
         return None
     if prof and prof.get("data"):
-        pipeline.save_research(brand, prof)
+        SS.setdefault("research", {})[brand] = prof
     return prof
 
 
@@ -283,13 +284,15 @@ def analyse(brand, n, allow_research=True):
     t0 = time.time()
     with st.status(f"Analysing {brand}…", expanded=True) as box:
         # 1 research
-        prof = cfg["profile"]
-        if prof is None and allow_research and reasoning.available():
+        prof = None                                   # research runs fresh on every analysis
+        if allow_research and reasoning.available():
             if quota.allow("claude", SS):
                 st.write("⧗ **Researching the franchise** — Claude is reading the official site, directories and press (~1 min)…")
                 prof = safe_research(brand)
                 cfg = settings_for(brand)
                 cfg["profile"] = prof
+                if prof is None:
+                    cfg["m2_range"] = tuple(SS.get("settings", {}).get(brand, {}).get("m2_range") or pipeline.DEFAULT_M2)
             else:
                 st.write("⚠ Daily research limit reached — continuing without brand economics.")
         d = (prof or {}).get("data") or {}
@@ -342,7 +345,7 @@ def page_analyse():
          "simulates each unit's P&L and ranks them by risk-adjusted return.")
     reg = registry()
     opts = reg[reg["n_stores"] >= 3].copy()
-    research = {b: pipeline.cached_research(b) for b in opts["brand"].head(400)}
+    research = SS.get("research", {})
     stat = {r.brand: brand_status(r._asdict(), research.get(r.brand)) for r in opts.itertuples()}
     c0, c1, c2, c3 = st.columns([1.3, 3.3, 1.0, 1.0])
     sectors = ["All sectors"] + opts.groupby("sector")["n_stores"].sum().sort_values(ascending=False).index.tolist()
@@ -748,7 +751,7 @@ def page_report():
 def page_directory():
     hero("Every chain operating in Madrid, detected from the municipal premises census and OpenStreetMap.")
     reg = registry()
-    research = {b: pipeline.cached_research(b) for b in reg["brand"].head(400)}
+    research = SS.get("research", {})
     reg["status"] = [" ".join(brand_status(r._asdict(), research.get(r.brand))) for r in reg.itertuples()]
     k = st.columns(4)
     k[0].metric("Brands detected", f"{len(reg):,}")
@@ -984,7 +987,7 @@ def page_methodology():
     st.markdown("""
 | Task | What Claude does | What it may not do |
 |---|---|---|
-| Franchise research (step 1, cached per brand) | Web search; eligibility in Spain, who provides premises, fees, investment, revenue, cost ratios, unit size — each cited and labelled | Invent a number; present a non-Spain figure as Spanish |
+| Franchise research (step 1, fresh on every run) | Web search; eligibility in Spain, who provides premises, fees, investment, revenue, cost ratios, unit size — each cited and labelled | Invent a number; present a non-Spain figure as Spanish |
 | Investment memo | Verdict and unit-by-unit reasoning from the evidence pack | Use any number not in the evidence pack; change model outputs |
 """)
     st.markdown("## 10 · Limitations")
